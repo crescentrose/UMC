@@ -715,7 +715,12 @@ RemovePreviousMapsFromCycle()
 {
     map_kv = CreateKeyValues("umc_rotation");
     KvCopySubkeys(umc_mapcycle, map_kv);
-    FilterMapcycleFromArrays(map_kv, vote_mem_arr, vote_catmem_arr, GetConVarInt(cvar_vote_catmem));
+    FilterMapcycleFromArrays(
+        view_as<KeyValues>(map_kv),
+        view_as<ArrayList>(vote_mem_arr),
+        view_as<ArrayList>(vote_catmem_arr), 
+        GetConVarInt(cvar_vote_catmem)
+    );
 }
 
 //************************************************************************************************//
@@ -1183,16 +1188,6 @@ public StartMapVote()
 //************************************************************************************************//
 //                                   ULTIMATE MAPCHOOSER EVENTS                                   //
 //************************************************************************************************//
-//Called when UMC has extended a map.
-public UMC_OnMapExtended()
-{
-    UpdateTimers();
-    UpdateOtherTimers();
-    extend_counter++;
-    vote_completed = false;
-    vote_enabled = true;
-    vote_failed = false;
-}
 
 //Called when UMC has set a next map.
 public UMC_OnNextmapSet(Handle:kv, const String:map[], const String:group[], const String:display[])

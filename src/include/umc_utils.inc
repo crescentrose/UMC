@@ -26,7 +26,7 @@
         new size = strlen(message) + 255;
         decl String:fMessage[size];
         VFormat(fMessage, size, message, 2);
-        
+
         LogUMCMessage("DEBUG: %s", fMessage);
     }
     #define DEBUG_MESSAGE(%0) DebugMessage(%0);
@@ -41,12 +41,12 @@ stock LogUMCMessage(const String:message[], any:...)
     new size = strlen(message) + 255;
     decl String:fMessage[size];
     VFormat(fMessage, size, message, 2);
-    
+
     decl String:fileName[PLATFORM_MAX_PATH];
     decl String:timeStamp[64];
     FormatTime(timeStamp, sizeof(timeStamp), "%Y%m%d", GetTime());
     BuildPath(Path_SM, fileName, sizeof(fileName), "logs/UMC_%s.log", timeStamp);
-    
+
     LogToFile(fileName, fMessage);
 }
 
@@ -74,7 +74,7 @@ stock Handle:CreateMapTrie(const String:map[], const String:group[])
 stock Handle:GetKvFromFile(const String:filename[], const String:rootKey[], bool:checkNorm=true)
 {
     new Handle:kv = CreateKeyValues(rootKey);
-    
+
     //Log an error and return empty handle if the kv file fails to parse.
     if (!(checkNorm && ConvertNormalMapcycle(kv, filename)) && !FileToKeyValues(kv, filename))
     {
@@ -82,11 +82,11 @@ stock Handle:GetKvFromFile(const String:filename[], const String:rootKey[], bool
         CloseHandle(kv);
         return INVALID_HANDLE;
     }
-    
+
 #if UMC_DEBUG
     LogKv(kv);
 #endif
-    
+
     return kv;
 }
 
@@ -95,12 +95,12 @@ stock bool:ConvertNormalMapcycle(Handle:kv, const String:filename[])
 {
     //DEBUG_MESSAGE("Opening Mapcycle File %s", filename)
     new Handle:file = OpenFile(filename, "r");
-    
+
     if (file == INVALID_HANDLE)
-    {    
+    {
         return false;
     }
-    
+
     //DEBUG_MESSAGE("Fetching first line.")
     new String:firstLine[256];
     new bool:foundDef;
@@ -113,23 +113,23 @@ stock bool:ConvertNormalMapcycle(Handle:kv, const String:filename[])
             break;
         }
     }
-    
+
     if (!foundDef)
     {
         //DEBUG_MESSAGE("Couldn't find first line")
         CloseHandle(file);
         return false;
     }
-    
+
     //DEBUG_MESSAGE("Checking first line for UMC header: \"%s\"", firstLine)
     static Handle:re = INVALID_HANDLE;
     if (re == INVALID_HANDLE)
     {
         re = CompileRegex("^//!UMC\\s+([0-9]+)\\s*$");
     }
-    
+
     decl String:buffer[5];
-    
+
     if (MatchRegex(re, firstLine) > 1)
     {
         GetRegexSubString(re, 1, buffer, sizeof(buffer));
@@ -140,19 +140,19 @@ stock bool:ConvertNormalMapcycle(Handle:kv, const String:filename[])
         CloseHandle(file);
         return false;
     }
-    
+
     //DEBUG_MESSAGE("Making a map group.")
     static Handle:re2 = INVALID_HANDLE;
     if (re2 == INVALID_HANDLE)
     {
         re2 = CompileRegex("^\\s*([^/\\\\:*?'\"<>|\\s]+)\\s*(?://.*)?$");
     }
-    
+
     KvJumpToKey(kv, "Mapcycle", true);
     KvSetNum(kv, "maps_invote", StringToInt(buffer));
-    
+
     //DEBUG_MESSAGE("Parsing maps.")
-    
+
     decl String:map[MAP_LENGTH];
     decl String:line[256];
     while (ReadFileLine(file, line, sizeof(line)))
@@ -166,7 +166,7 @@ stock bool:ConvertNormalMapcycle(Handle:kv, const String:filename[])
             KvGoBack(kv);
         }
     }
-    
+
     CloseHandle(file);
     KvGoBack(kv);
     return true;
@@ -180,16 +180,16 @@ stock bool:KvJumpToMap(Handle:kv, const String:map[])
     if (!KvGotoFirstSubKey(kv))
     {
         return false;
-    }    
+    }
     decl String:mapName[MAP_LENGTH];
-    
+
     do
     {
         if (!KvGotoFirstSubKey(kv))
         {
             continue;
         }
-        
+
         do
         {
             KvGetSectionName(kv, mapName, sizeof(mapName));
@@ -199,11 +199,11 @@ stock bool:KvJumpToMap(Handle:kv, const String:map[])
             }
         }
         while (KvGotoNextKey(kv));
-        
+
         KvGoBack(kv);
     }
     while (KvGotoNextKey(kv));
-    
+
     KvGoBack(kv);
     return false;
 }
@@ -214,23 +214,24 @@ stock bool:KvJumpToMap(Handle:kv, const String:map[])
 //  map: Map whose group we're looking for.
 //  buffer: Buffer to store the found group name.
 //  maxlen: Maximum length of the buffer.
-stock bool:KvFindGroupOfMap(Handle:kv, const String:map[], String:buffer[], maxlen)
+stock bool KvFindGroupOfMap(Handle kv, char[] map, char[] buffer, int maxlen)
 {
     if (!KvGotoFirstSubKey(kv))
     {
         return false;
     }
-    
-    decl String:mapName[MAP_LENGTH], String:groupName[MAP_LENGTH];
+
+    char mapName[MAP_LENGTH], groupName[MAP_LENGTH];
+
     do
     {
         KvGetSectionName(kv, groupName, sizeof(groupName));
-        
+
         if (!KvGotoFirstSubKey(kv))
         {
             continue;
         }
-        
+
         do
         {
             KvGetSectionName(kv, mapName, sizeof(mapName));
@@ -243,16 +244,17 @@ stock bool:KvFindGroupOfMap(Handle:kv, const String:map[], String:buffer[], maxl
             }
         }
         while (KvGotoNextKey(kv));
-        
+
         KvGoBack(kv);
     }
     while (KvGotoNextKey(kv));
     KvGoBack(kv);
+
     return false;
 }
 
 
-enum CustomHudFallbackType 
+enum CustomHudFallbackType
 {
     HudFallback_Chat,
     HudFallback_Hint,
@@ -264,13 +266,13 @@ enum CustomHudFallbackType
 static g_iSColors[7]             = {1, 3, 3, 4, 4, 5, 6};
 static String:g_sSColors[7][13]  = {"{DEFAULT}", "{LIGHTGREEN}", "{TEAM}", "{GREEN}", "{RED}",
                                     "{DARKGREEN}", "{YELLOW}"};
-static g_iTColors[13][3]         = {{255, 255, 255}, {255,   0,   0}, {  0, 255,   0}, 
+static g_iTColors[13][3]         = {{255, 255, 255}, {255,   0,   0}, {  0, 255,   0},
                                     {  0,   0, 255}, {255, 255,   0}, {255,   0, 255},
                                     {  0, 255, 255}, {255, 128,   0}, {255,   0, 128},
-                                    {128, 255,   0}, {  0, 255, 128}, {128,   0, 255}, 
+                                    {128, 255,   0}, {  0, 255, 128}, {128,   0, 255},
                                     {  0, 128, 255}};
 static String:g_sTColors[13][12] = {"{WHITE}", "{RED}", "{GREEN}", "{BLUE}", "{YELLOW}", "{PURPLE}",
-                                    "{CYAN}", "{ORANGE}", "{PINK}", "{OLIVE}", "{LIME}", "{VIOLET}",    
+                                    "{CYAN}", "{ORANGE}", "{PINK}", "{OLIVE}", "{LIME}", "{VIOLET}",
                                     "{LIGHTBLUE}"};
 
 //Handle to the Center Message timer. For Vote Warnings.
@@ -281,18 +283,18 @@ static bool:center_warning_active = false;
 stock DisplayServerMessage(const String:msg[], const String:type[])
 {
     if (center_warning_active)
-    {   
+    {
         center_warning_active = false;
         TriggerTimer(center_message_timer);
     }
-    
+
     if (strlen(msg) == 0)
-    {    
+    {
         return;
     }
     decl String:message[255];
     strcopy(message, sizeof(message), msg);
-    
+
     //Display a chat message ("S") if the user specifies.
     if (StrContains(type, "S") != -1)
     {
@@ -308,87 +310,87 @@ stock DisplayServerMessage(const String:msg[], const String:type[])
         }
         PrintToChatAll(message);
     }
-    
+
     //Buffer to hold message in order to manipulate it.
     decl String:sTextTmp[255];
-    
+
     //Display a top message ("T") if the user specifies.
     if (StrContains(type, "T") != -1)
     {
         strcopy(sTextTmp, sizeof(sTextTmp), message);
         decl String:sColor[16];
         new iColor = -1, iPos = BreakString(sTextTmp, sColor, sizeof(sColor));
-        
-        for (new i = 0; i < sizeof(g_sTColors); i++)
+
+        for (int i = 0; i < sizeof(g_sTColors); i++)
         {
             if (StrEqual(sColor, g_sTColors[i]))
-            {    
+            {
                 iColor = i;
             }
         }
-        
+
         if (iColor == -1)
         {
             iPos   = 0;
             iColor = 0;
         }
-        
+
         new Handle:hKv = CreateKeyValues("Stuff", "title", sTextTmp[iPos]);
         KvSetColor(hKv, "color", g_iTColors[iColor][0], g_iTColors[iColor][1], g_iTColors[iColor][2], 255);
         KvSetNum(hKv, "level", 1);
         KvSetNum(hKv, "time",  10);
-        
+
         for (new i = 1; i <= MaxClients; i++)
         {
             if (IsClientInGame(i) && !IsFakeClient(i))
-            {    
+            {
                 CreateDialog(i, hKv, DialogType_Msg);
             }
         }
         CloseHandle(hKv);
     }
-    
+
     // Remove colors, because C,H,M methods do not support colors.
     //Remove a color from the message string for each color in the Say color array.
     for (new c = 0; c < sizeof(g_iSColors); c++)
     {
         if (StrContains(message, g_sSColors[c]) != -1)
-        {    
+        {
             ReplaceString(message, sizeof(message), g_sSColors[c], "");
         }
     }
-    
+
     //Remove a color from the message string for each color in the Top color array.
     for (new c = 0; c < sizeof(g_iTColors); c++)
     {
         if (StrContains(message, g_sTColors[c]) != -1)
-        {    
+        {
             ReplaceString(message, sizeof(message), g_sTColors[c], "");
         }
     }
-    
+
     //Display a center message ("C") if the user specifies.
     if (StrContains(type, "C") != -1)
     {
         PrintCenterTextAll(message);
-        
+
         //Setup timer to keep the center message visible.
         new Handle:hCenterAd;
         center_message_timer = CreateDataTimer(1.0, Timer_CenterAd, hCenterAd, TIMER_REPEAT);
         WritePackString(hCenterAd, message);
-        
+
         center_warning_active = center_message_timer != INVALID_HANDLE;
         if (!center_warning_active)
-        {    
+        {
             CloseHandle(hCenterAd);
         }
     }
-    
+
     //Display a hint message ("H") if the user specifies.
     if (StrContains(type, "H") != -1)
-    {    
+    {
         PrintHintTextToAll(message);
-    }    
+    }
 }
 
 
@@ -398,10 +400,10 @@ public Action:Timer_CenterAd(Handle:timer, Handle:pack)
 {
     decl String:sText[256];
     static iCount = 0;
-    
+
     ResetPack(pack);
     ReadPackString(pack, sText, sizeof(sText));
-    
+
     if (center_warning_active && ++iCount < 5)
     {
         PrintCenterTextAll(sText);
@@ -421,7 +423,7 @@ public Action:Timer_CenterAd(Handle:timer, Handle:pack)
 stock ResetArray(bool:arr[], size)
 {
     for (new i = 0; i < size; i++)
-    {    
+    {
         arr[i] = false;
     }
 }
@@ -435,10 +437,10 @@ stock CacheSound(const String:sound[])
     {
         //Filepath buffer
         decl String:filePath[PLATFORM_MAX_PATH];
-    
+
         //Format sound to the correct directory.
         FormatEx(filePath, sizeof(filePath), "sound/%s", sound);
-        
+
         //Log an error and don't cache the sound if the sound file does not exist
         if (!FileExists(filePath, true))
         {
@@ -449,7 +451,7 @@ stock CacheSound(const String:sound[])
         {
             //Make sure clients download the sound if they don't have it.
             AddFileToDownloadsTable(filePath);
-            
+
             //Cache it.
             PrecacheSoundAny(sound, true);
         }
@@ -475,7 +477,7 @@ stock InsertArrayString(Handle:arr, index, const String:value[])
         SetArrayString(arr, index, value);
     }
     else
-    {    
+    {
         PushArrayString(arr, value);
     }
 }
@@ -502,7 +504,7 @@ stock TrimArray(Handle:arr, size)
     //Remove elements from the start of an array while the size of the array is greater than the required size.
     new asize = GetArraySize(arr);
     while (asize > size)
-    {    
+    {
         RemoveFromArray(arr, --asize);
     }
 }
@@ -516,7 +518,7 @@ stock AddToMemoryArray(const String:mapName[], Handle:arr, size)
 {
     //Add the new map to the beginning of the array.
     InsertArrayString(arr, 0, mapName);
-    
+
     //Trim the array down to size.
     TrimArray(arr, size);
 }
@@ -539,7 +541,7 @@ stock AddArrayToMenu(Handle:menu, Handle:arr, Handle:dispArr=INVALID_HANDLE)
         {
             GetArrayString(dispArr, i, disp, sizeof(disp));
         }
-        
+
         AddMenuItem(menu, map, disp);
     }
 }
@@ -550,7 +552,7 @@ stock ForceChangeInFive(const String:map[], const String:reason[]="")
 {
     //Notify the server.
     PrintToChatAll("\x03[UMC]\x01 %t", "Map Change in 5");
-    
+
     //Setup the change.
     ForceChangeMap(map, 5.0, reason);
 }
@@ -582,9 +584,9 @@ public Action:Handle_MapChangeTimer(Handle:timer, Handle:pack)
     ResetPack(pack);
     ReadPackString(pack, map, sizeof(map));
     ReadPackString(pack, reason, sizeof(reason));
-    
+
     //DEBUG_MESSAGE("Changing map to %s: %s", map, reason)
-    
+
     //Change the map.
     ForceChangeLevel(map, reason);
 }
@@ -597,7 +599,7 @@ stock bool:IsTimeBetween(min, max)
     decl String:time[5];
     FormatTime(time, sizeof(time), "%H%M");
     new theTime = StringToInt(time);
-    
+
     //Handle wrap-around case if...
     //  ...max time is less than min time.
     if (max <= min)
@@ -627,7 +629,7 @@ stock ConvertAdtArray(Handle:arr, any:newArr[], size)
     new arraySize = GetArraySize(arr);
     new min = size < arraySize ? size : arraySize;
     for (new i = 0; i < min; i++)
-    {    
+    {
         newArr[i] = GetArrayCell(arr, i);
     }
 }
@@ -648,12 +650,12 @@ stock bool:GetWeightedRandomSubKey(String:buffer[], size, Handle:weightArr, Hand
 {
     //Calc total number of maps we're choosing.
     new total = GetArraySize(weightArr);
-    
+
     //DEBUG_MESSAGE("Getting number of items in the pool - %i", total)
-    
+
     //Return an answer immediately if there's only one map to choose from.
     if (total == 1)
-    {   
+    {
         //DEBUG_MESSAGE("Only 1 item in pool, setting it as the winner.")
         //WE HAVE A WINNER!
         GetArrayString(nameArr, 0, buffer, size);
@@ -677,7 +679,7 @@ stock bool:GetWeightedRandomSubKey(String:buffer[], size, Handle:weightArr, Hand
     //make the effective range [0, totalweight).
     new Float:rand = GetURandomFloat() * ArraySum(weights, total);
     new Float:runningTotal = 0.0; //keeps track of total so far
-    
+
     //DEBUG_MESSAGE("Find the winner in the pool.")
     //Determine if a map is the winner for each map in the arrays.
     for (new i = 0; i < total; i++)
@@ -685,7 +687,7 @@ stock bool:GetWeightedRandomSubKey(String:buffer[], size, Handle:weightArr, Hand
         //DEBUG_MESSAGE("Update running total of weights.")
         //add weight onto the total
         runningTotal += weights[i];
-        
+
         //DEBUG_MESSAGE("Check if we're at the right item.")
         //We have found an answer if the running total has reached the random number.
         if (runningTotal > rand)
@@ -696,7 +698,7 @@ stock bool:GetWeightedRandomSubKey(String:buffer[], size, Handle:weightArr, Hand
             return true;
         }
     }
-    
+
     //DEBUG_MESSAGE("ERROR WITH THE RANDOMIZATION ALGORITHM!")
     //This shouldn't ever happen, but alas the compiler complains.
     index = -1;
@@ -838,10 +840,10 @@ public Action:Handle_RetryVoteTimer(Handle:timer, Handle:callback)
     {
         return Plugin_Continue;
     }
-    
+
     Call_StartForward(callback);
     Call_Finish();
-    
+
     return Plugin_Stop;
 }
 
@@ -851,7 +853,7 @@ public CompareMapTries(index1, index2, Handle:array, Handle:hndl)
 {
     decl String:map1[MAP_LENGTH], String:map2[MAP_LENGTH],
          String:group1[MAP_LENGTH], String:group2[MAP_LENGTH];
-    
+
     new Handle:map = INVALID_HANDLE;
     map = GetArrayCell(array, index1);
     GetTrieString(map, MAP_TRIE_MAP_KEY, map1, sizeof(map1));
@@ -859,7 +861,7 @@ public CompareMapTries(index1, index2, Handle:array, Handle:hndl)
     map = GetArrayCell(array, index2);
     GetTrieString(map, MAP_TRIE_MAP_KEY, map2, sizeof(map2));
     GetTrieString(map, MAP_TRIE_GROUP_KEY, group2, sizeof(group2));
-    
+
     new result = strcmp(map1, map2);
     if (result == 0)
     {
@@ -881,24 +883,24 @@ stock PrintKvToConsole(Handle:kv, client, depth=0)
 {
     decl String:section[64];
     KvGetSectionName(kv, section, sizeof(section));
-    
+
     new whitespace = depth*2+1;
     decl String:space[whitespace];
     FillWhiteSpace(space, whitespace);
-    
+
     PrintToConsole(client, "%s\"%s\"", space, section);
-    
+
     if (!KvGotoFirstSubKey(kv))
     {
         return;
     }
-    
+
     do
     {
         PrintKvToConsole(kv, client, depth + 1);
     }
     while (KvGotoNextKey(kv));
-    
+
     KvGoBack(kv);
 }
 
@@ -908,13 +910,13 @@ stock LogKv(Handle:kv, depth=0)
 {
     decl String:section[64];
     KvGetSectionName(kv, section, sizeof(section));
-    
+
     new whitespace = depth*2+1;
     decl String:space[whitespace];
     FillWhiteSpace(space, whitespace);
-    
+
     //LogUMCMessage("%i: %s\"%s\"", depth+1, space, section);
-    
+
     if (!KvGotoFirstSubKey(kv))
     {
         return;
@@ -924,7 +926,7 @@ stock LogKv(Handle:kv, depth=0)
         LogKv(kv, depth + 1);
     }
     while (KvGotoNextKey(kv));
-    
+
     KvGoBack(kv);
 }
 
@@ -1019,50 +1021,51 @@ stock bool:ClientHasAdminFlags(client, const String:flagString[])
 }
 
 
-//Filters a mapcycle with all invalid entries filtered out. 
+//Filters a mapcycle with all invalid entries filtered out.
 // NOTE: Our journey starts here! This gets called first and runs through the KV that we sent to it.
 // First, it deletes all groups and maps that have been excluded from the search before we return to the first
 // sub key in the KV to run the search.
 // Second, it searchs the updated KV for the group that our map is in and filters the information until we only
 // have the map and group information left over.
-stock FilterMapcycleFromArrays(Handle:kv, Handle:exMaps, Handle:exGroups, numExGroups, bool:deleteEmpty=false)
+stock FilterMapcycleFromArrays(KeyValues kv, ArrayList exMaps, ArrayList exGroups, int numExGroups, bool deleteEmpty = false)
 {
-    new size = GetArraySize(exGroups);
-    new len = size < numExGroups ? size : numExGroups;
-    decl String:group[MAP_LENGTH];
-    for (new i = 0; i < len; i++)
+    int size = exGroups.Length;
+    int len = size < numExGroups ? size : numExGroups;
+    char group[MAP_LENGTH];
+
+    // Exclude all GROUPS from exGroups array.
+    for (int i = 0; i < len; i++)
     {
         GetArrayString(exGroups, i, group, sizeof(group));
-        if (!deleteEmpty)
-        {
-            KvJumpToKey(kv, group);
-            KvDeleteAllSubKeys(kv);
-            KvGoBack(kv);
-        }
-        else
+        if (deleteEmpty)
         {
             KvDeleteSubKey(kv, group);
         }
+        else
+        {
+            kv.JumpToKey(group);
+            KvDeleteAllSubKeys(kv);
+            kv.GoBack();
+        }
     }
-    
+
     if (!KvGotoFirstSubKey(kv))
-    {
         return;
-    }
-    
+
     for ( ; ; )
     {
-        FilterMapGroupFromArrays(kv, exMaps, exGroups);
-        
-        //Delete the group if there are no valid maps in it.
-        if (deleteEmpty) 
+        // Here we purposefully ignore groups so that we don't run into a
+        // situation where a map that should be ignored isn't because it's in
+        // two groups at the same time
+        FilterMapGroupFromArrays(kv, exMaps, exGroups, true);
+
+        // Delete the group if there are no valid maps in it.
+        if (deleteEmpty)
         {
-            if (!KvGotoFirstSubKey(kv))
+            if (!kv.GotoFirstSubKey())
             {
-                //DEBUG_MESSAGE("Removing empty group \"%s\".", group)
-                if (KvDeleteThis(kv) == -1)
+                if (kv.DeleteThis() == -1)
                 {
-                   // DEBUG_MESSAGE("Mapcycle filtering completed.")
                     return;
                 }
                 else
@@ -1070,102 +1073,80 @@ stock FilterMapcycleFromArrays(Handle:kv, Handle:exMaps, Handle:exGroups, numExG
                     continue;
                 }
             }
-            
-            KvGoBack(kv);
+
+            kv.GoBack();
         }
-        if (!KvGotoNextKey(kv))
+
+        if (!kv.GotoNextKey())
+            break;
+    }
+
+    kv.GoBack();
+}
+
+
+// Filters the maps from all groups they appear in.
+stock FilterMapGroupFromArrays(KeyValues kv, ArrayList exMaps, ArrayList exGroups, bool ignoreGroups = false)
+{
+    char group[MAP_LENGTH];
+    kv.GetSectionName(group, sizeof(group));
+
+    if (!kv.GotoFirstSubKey())
+        return;
+
+    char mapName[MAP_LENGTH];
+    for ( ; ; )
+    {
+        kv.GetSectionName(mapName, sizeof(mapName));
+        if (IsMapInArrays(mapName, group, exMaps, exGroups, ignoreGroups))
         {
+            kv.DeleteThis();
+        }
+        else if (!kv.GotoNextKey()) {
             break;
         }
     }
-    
-    KvGoBack(kv);
-    
-    //DEBUG_MESSAGE("Mapcycle filtering completed.")
+
+    kv.GoBack();
 }
 
-
-//Filters the kv at the level of the map group.
-stock FilterMapGroupFromArrays(Handle:kv, Handle:exMaps, Handle:exGroups)
+stock bool IsMapInArrays(const char[] map, const char[] group, ArrayList exMaps, ArrayList exGroups, bool ignoreGroups = false)
 {
-    decl String:group[MAP_LENGTH];
-    KvGetSectionName(kv, group, sizeof(group));
-    
-    if (!KvGotoFirstSubKey(kv))
-    {
-        return;
-    }
-    
-    //DEBUG_MESSAGE("Starting filtering of map group \"%s\".", group)
-    
-    decl String:mapName[MAP_LENGTH];
-    for ( ; ; )
-    {
-        KvGetSectionName(kv, mapName, sizeof(mapName));
-        if (IsMapInArrays(mapName, group, exMaps, exGroups))
-        {
-            //DEBUG_MESSAGE("Removing invalid map \"%s\" from group \"%s\".", mapName, group)
-            if (KvDeleteThis(kv) == -1)
-            {
-                //DEBUG_MESSAGE("Map Group filtering completed for group \"%s\".", group)
-                return;
-            }
-        }
-        else
-        {
-            if (!KvGotoNextKey(kv))
-            {
-                break;
-            }
-        }
-    }
-    
-    KvGoBack(kv);
-    
-    //DEBUG_MESSAGE("Map Group filtering completed for group \"%s\".", group)
-}
+    int index = -1;
+    bool isExcluded = false;
+    char exGroup[MAP_LENGTH];
 
-
-stock bool:IsMapInArrays(const String:map[], const String:group[], Handle:exMaps, Handle:exGroups)
-{
-    //DEBUG_MESSAGE("Starting exclusion traversal...")
-    new index = -1;
-    new bool:isExcluded = false;
-    decl String:exGroup[MAP_LENGTH];
-    if (exMaps != INVALID_HANDLE && exGroups != INVALID_HANDLE)
-    {
-        new gSize = GetArraySize(exGroups);
-        do
-        {
-            index = FindStringInArrayEx(exMaps, map, index+1);
-            if (index >= 0 && index < gSize)
-            {
-                //DEBUG_MESSAGE("Map found at %i", index)
-                GetArrayString(exGroups, index, exGroup, sizeof(exGroup));
-                isExcluded = StrEqual(exGroup, group, false);
-                //DEBUG_MESSAGE("Map Excluded? %i (%s | %s)", _:isExcluded, exGroup, group)
-            }
-        }
-        while (!isExcluded && index != -1);
-    }
+    if (exMaps == null || exGroups == null)
+        return false;
     
+    do
+    {
+        index = FindStringInArrayEx(exMaps, map, index+1);
+        if (index >= 0 && index < exGroups.Length)
+        {
+            exGroups.GetString(index, exGroup, sizeof(exGroup));
+            isExcluded = ignoreGroups ? true : StrEqual(exGroup, group, false);
+        }
+    }
+    while (!isExcluded && index != -1);
+
     return isExcluded;
 }
 
 
 stock bool:GroupExcludedPreviouslyPlayed(const String:group[], Handle:exGroups, numExGroups)
 {
-    if (numExGroups <= 0) 
+    if (numExGroups <= 0)
     {
         return false;
     }
-    
+
     new i = FindStringInArray(exGroups, group);
     return i != -1 && i < numExGroups;
 }
 
 
-stock bool:MapExcludedPreviouslyPlayed(const String:map[], const String:group[], Handle:exMaps, Handle:exGroups, numExGroups)
+stock bool MapExcludedPreviouslyPlayed(const char[] map, const char[] group, ArrayList exMaps, ArrayList exGroups, numExGroups)
 {
     return GroupExcludedPreviouslyPlayed(group, exGroups, numExGroups) || IsMapInArrays(map, group, exMaps, exGroups);
 }
@@ -1183,7 +1164,7 @@ stock KvDeleteAllSubKeys(Handle:kv)
     {
         return;
     }
-    
+
     for ( ; ; )
     {
         if (KvDeleteThis(kv) == -1)
@@ -1220,19 +1201,19 @@ stock ConvertUserIDsToClients(const userIds[], clients[], amt)
 }
 
 
-stock bool:GetTrieArray2(Handle:trie, const String:key[], any:arr[], max_size, &size=0) 
-{ 
-    new bool:result = GetTrieArray(trie, key, arr, max_size, size); 
-    if (!result) 
+stock bool:GetTrieArray2(Handle:trie, const String:key[], any:arr[], max_size, &size=0)
+{
+    new bool:result = GetTrieArray(trie, key, arr, max_size, size);
+    if (!result)
     {
-        result = GetTrieValue(trie, key, arr[0]); 
-        if (result) 
-        { 
+        result = GetTrieValue(trie, key, arr[0]);
+        if (result)
+        {
             size = 1;
         }
     }
-    
-    return result; 
+
+    return result;
 }
 
 
@@ -1242,7 +1223,7 @@ stock ArrayMin(const arr[], maxlen, &idx=0)
     {
         return 0;
     }
-    
+
     new minIdx = 0;
     new min = arr[0];
     new tmp;
@@ -1265,7 +1246,7 @@ stock ArrayMax(const arr[], maxlen, &idx=0)
     {
         return 0;
     }
-    
+
     new maxIdx = 0;
     new max = arr[0];
     new tmp;
@@ -1280,3 +1261,5 @@ stock ArrayMax(const arr[], maxlen, &idx=0)
     }
     return max;
 }
+
+// vim: set ft=sourcepawn:
