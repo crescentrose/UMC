@@ -8,6 +8,7 @@
 #pragma semicolon 1
 
 #include <sourcemod>
+#include <menus>
 #include <umc-core>
 #include <sdktools_functions>
 #include <sdktools_entinput>
@@ -524,25 +525,28 @@ stock AddToMemoryArray(const String:mapName[], Handle:arr, size)
 }
 
 
-//Adds entire array to the given menu.
-stock AddArrayToMenu(Handle:menu, Handle:arr, Handle:dispArr=INVALID_HANDLE)
+// Adds entire array to the given menu.
+stock AddArrayToMenu(Handle menu, Handle arr, Handle dispArr = null, Handle styleArr = null)
 {
-    decl String:map[MAP_LENGTH], String:disp[MAP_LENGTH];
-    new arrSize = GetArraySize(arr);
-    new dispSize = (dispArr != INVALID_HANDLE) ? GetArraySize(dispArr) : 0;
-    for (new i = 0; i < arrSize; i++)
+    char map[MAP_LENGTH], displayString[MAP_LENGTH];
+    int style;
+    int arrSize = GetArraySize(arr);
+    int dispSize = (dispArr != null) ? GetArraySize(dispArr) : 0;
+    int styleSize = (styleArr != null) ? GetArraySize(styleArr) : 0;
+
+    for (int i = 0; i < arrSize; i++)
     {
         GetArrayString(arr, i, map, sizeof(map));
-        if (i >= dispSize)
-        {
-            disp = map;
-        }
-        else
-        {
-            GetArrayString(dispArr, i, disp, sizeof(disp));
-        }
+        displayString = map;
+        style = ITEMDRAW_DEFAULT;
 
-        AddMenuItem(menu, map, disp);
+        if (i < dispSize)
+            GetArrayString(dispArr, i, displayString, sizeof(displayString));
+
+        if (i < styleSize)
+            style = GetArrayCell(styleArr, i);
+
+        AddMenuItem(menu, map, displayString, style);
     }
 }
 

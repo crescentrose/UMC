@@ -363,10 +363,7 @@ RemovePreviousMapsFromCycle()
     );
 }
 
-//************************************************************************************************//
-//                                           NOMINATIONS                                          //
-//************************************************************************************************//
-//Displays a nomination menu to the given client.
+// Displays a nomination menu to the given client.
 bool DisplayNominationMenu(int client)
 {
     if (!can_nominate)
@@ -374,7 +371,7 @@ bool DisplayNominationMenu(int client)
     
     LogUMCMessage("%N wants to nominate a map.", client);
 
-    //Build the menu
+    // Build the menu
     Handle menu = GetConVarBool(cvar_nominate_tiered) ? BuildTieredNominationMenu(client) : BuildNominationMenu(client);
     
     //Display the menu if the menu was built successfully.
@@ -389,15 +386,10 @@ Handle BuildNominationMenu(int client, const char[] cat = INVALID_GROUP)
 {
     // Initialize the menu
     Menu menu = new Menu(Handle_NominationMenu, MenuAction_Display);
-    
-    // Set the title.
     menu.SetTitle("%T", "Nomination Menu Title", LANG_SERVER);
     
     if (!StrEqual(cat, INVALID_GROUP))
-    {
-        // Make it so we can return to the previous menu.
-        SetMenuExitBackButton(menu, true);
-    }
+        SetMenuExitBackButton(menu, true); // Make it so we can return to the previous menu.
     
     map_kv.Rewind();
     
@@ -425,22 +417,24 @@ Handle BuildNominationMenu(int client, const char[] cat = INVALID_GROUP)
     // already thinking these would be chicken nuggets!
     int numCells = ByteCountToCells(MAP_LENGTH);
 
-    // Set up nomination list per client
     nom_menu_groups[client] = new ArrayList(numCells);
     nom_menu_nomgroups[client] = new ArrayList(numCells);
 
+    char mapBuff[MAP_LENGTH], groupBuff[MAP_LENGTH], group[MAP_LENGTH], display[MAP_LENGTH];
+    char dAdminFlags[64], gAdminFlags[64], mAdminFlags[64];
+    int style;
+
     ArrayList menuItems = new ArrayList(numCells);
     ArrayList menuItemDisplay = new ArrayList(numCells);
-
-    char mapBuff[MAP_LENGTH], groupBuff[MAP_LENGTH], group[MAP_LENGTH], display[MAP_LENGTH];
+    ArrayList menuItemStyle = new ArrayList();
     StringMap mapTrie = new StringMap();
-    
-    decl String:dAdminFlags[64], String:gAdminFlags[64], String:mAdminFlags[64];
+
     GetConVarString(cvar_flags, dAdminFlags, sizeof(dAdminFlags));
-    new clientFlags = GetUserFlagBits(client);
+    int clientFlags = GetUserFlagBits(client);
     
-    for (new i = 0; i < mapArray.Length; i++)
+    for (int i = 0; i < mapArray.Length; i++)
     {
+        style = ITEMDRAW_DEFAULT;
         mapTrie = GetArrayCell(mapArray, i);
         GetTrieString(mapTrie, MAP_TRIE_MAP_KEY, mapBuff, sizeof(mapBuff));
         GetTrieString(mapTrie, MAP_TRIE_GROUP_KEY, groupBuff, sizeof(groupBuff));
@@ -450,15 +444,7 @@ Handle BuildNominationMenu(int client, const char[] cat = INVALID_GROUP)
         KvGetString(map_kv, "nominate_group", group, sizeof(group), INVALID_GROUP);
         
         if (StrEqual(group, INVALID_GROUP))
-        {
             strcopy(group, sizeof(group), groupBuff);
-        }
-        
-        if (UMC_IsMapNominated(mapBuff, group))
-        {
-            KvGoBack(map_kv);
-            continue;
-        }
         
         KvGetString(map_kv, NOMINATE_ADMINFLAG_KEY, gAdminFlags, sizeof(gAdminFlags), dAdminFlags);
         
@@ -466,33 +452,58 @@ Handle BuildNominationMenu(int client, const char[] cat = INVALID_GROUP)
         
         KvGetString(map_kv, NOMINATE_ADMINFLAG_KEY, mAdminFlags, sizeof(mAdminFlags), gAdminFlags);
         
-        //Check if admin flag set
-        if (mAdminFlags[0] != '\0')
-        {
-            //Check if player has admin flag
-            if (!(clientFlags & ReadFlagString(mAdminFlags)))
-            {
-                continue;
-            }
-        }
+        // Check if admin flag is set and if player has admin flag
+        if (mAdminFlags[0] != '\0' && !(clientFlags & ReadFlagString(mAdminFlags)))
+            continue;
         
-        //Get the name of the current map.
+        // Get the name of the current map.
         KvGetSectionName(map_kv, mapBuff, sizeof(mapBuff));
         
-        //Get the display string.
+        // Get the display string.
         UMC_FormatDisplayString(display, sizeof(display), dispKV, mapBuff, groupBuff);
+        
+        // we want to also have nominated maps in the menu, but disabled.
+        // otherwise people cry because they think we removed badwater
+        if (UMC_IsMapNominated(mapBuff, group))
+        {
+            FormatEx(display, sizeof(display), "%s (Nominated)", display);
+            style = ITEMDRAW_DISABLED;
+        }
+        else
+        {
+            // The map was not nominated yet, add it to the user's nominations
+            // lists
+            PushArrayString(nom_menu_groups[client], groupBuff);
+            PushArrayString(nom_menu_nomgroups[client], group);
+        }
   
-        //Add map data to the arrays.
+        // Add map data to the arrays.
         PushArrayString(menuItems, mapBuff);
         PushArrayString(menuItemDisplay, display);
-        PushArrayString(nom_menu_groups[client], groupBuff);
-        PushArrayString(nom_menu_nomgroups[client], group);
-        
+        PushArrayCell(menuItemStyle, style);
+
         KvRewind(map_kv);
+    }
+
+    // We also want to see the recently played maps at the bottom of the menu so
+    // that people don't think we stole their belowed upward.
+    ArrayList recentlyPlayedMaps = view_as<ArrayList>(vote_mem_arr);
+    for (int i = 0; i < recentlyPlayedMaps.Length; i++)
+    {
+        GetArrayString(recentlyPlayedMaps, i, display, sizeof(display));
+        if (i == 0) {
+            FormatEx(display, sizeof(display), "%s (Current Map)", display);
+        } else {
+            FormatEx(display, sizeof(display), "%s (Recently Played)", display);
+        }
+
+        PushArrayString(menuItems, mapBuff);
+        PushArrayString(menuItemDisplay, display);
+        PushArrayCell(menuItemStyle, ITEMDRAW_DISABLED);
     }
     
     //Add all maps from the nominations array to the menu.
-    AddArrayToMenu(menu, menuItems, menuItemDisplay);
+    AddArrayToMenu(menu, menuItems, menuItemDisplay, menuItemStyle);
     
     //No longer need the arrays.
     CloseHandle(menuItems);
