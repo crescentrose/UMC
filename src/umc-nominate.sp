@@ -422,11 +422,9 @@ Handle BuildNominationMenu(int client, const char[] cat = INVALID_GROUP)
 
     char mapBuff[MAP_LENGTH], groupBuff[MAP_LENGTH], group[MAP_LENGTH], display[MAP_LENGTH];
     char dAdminFlags[64], gAdminFlags[64], mAdminFlags[64];
-    int style;
+    UMCMenuItemStyle style;
 
-    ArrayList menuItems = new ArrayList(numCells);
-    ArrayList menuItemDisplay = new ArrayList(numCells);
-    ArrayList menuItemStyle = new ArrayList();
+    UMCMenuList menuList = new UMCMenuList();
     StringMap mapTrie = new StringMap();
 
     GetConVarString(cvar_flags, dAdminFlags, sizeof(dAdminFlags));
@@ -434,7 +432,7 @@ Handle BuildNominationMenu(int client, const char[] cat = INVALID_GROUP)
     
     for (int i = 0; i < mapArray.Length; i++)
     {
-        style = ITEMDRAW_DEFAULT;
+        style = Style_Normal;
         mapTrie = GetArrayCell(mapArray, i);
         GetTrieString(mapTrie, MAP_TRIE_MAP_KEY, mapBuff, sizeof(mapBuff));
         GetTrieString(mapTrie, MAP_TRIE_GROUP_KEY, groupBuff, sizeof(groupBuff));
@@ -467,7 +465,7 @@ Handle BuildNominationMenu(int client, const char[] cat = INVALID_GROUP)
         if (UMC_IsMapNominated(mapBuff, group))
         {
             FormatEx(display, sizeof(display), "%s (Nominated)", display);
-            style = ITEMDRAW_DISABLED;
+            style = Style_Disabled;
         }
         else
         {
@@ -478,9 +476,8 @@ Handle BuildNominationMenu(int client, const char[] cat = INVALID_GROUP)
         }
   
         // Add map data to the arrays.
-        PushArrayString(menuItems, mapBuff);
-        PushArrayString(menuItemDisplay, display);
-        PushArrayCell(menuItemStyle, style);
+        PrintToServer("unplayed: adding %s as '%s' with style %d", mapBuff, display, style);
+        menuList.AddItemList(mapBuff, display, style);
 
         KvRewind(map_kv);
     }
@@ -490,31 +487,25 @@ Handle BuildNominationMenu(int client, const char[] cat = INVALID_GROUP)
     ArrayList recentlyPlayedMaps = view_as<ArrayList>(vote_mem_arr);
     for (int i = 0; i < recentlyPlayedMaps.Length; i++)
     {
-        GetArrayString(recentlyPlayedMaps, i, display, sizeof(display));
+        // TODO: Use actual map display string
+        GetArrayString(recentlyPlayedMaps, i, mapBuff, sizeof(mapBuff));
         if (i == 0) {
-            FormatEx(display, sizeof(display), "%s (Current Map)", display);
+            FormatEx(display, sizeof(display), "%s (Current Map)", mapBuff);
         } else {
-            FormatEx(display, sizeof(display), "%s (Recently Played)", display);
+            FormatEx(display, sizeof(display), "%s (Recently Played)", mapBuff);
         }
 
-        PushArrayString(menuItems, mapBuff);
-        PushArrayString(menuItemDisplay, display);
-        PushArrayCell(menuItemStyle, ITEMDRAW_DISABLED);
+        PrintToServer("played: adding %s as '%s' with style %d", mapBuff, display, style);
+        menuList.AddItemList(mapBuff, display, Style_Disabled);
     }
     
-    //Add all maps from the nominations array to the menu.
-    AddArrayToMenu(menu, menuItems, menuItemDisplay, menuItemStyle);
+    AddMenuListToMenu(menu, menuList);
     
-    //No longer need the arrays.
-    CloseHandle(menuItems);
-    CloseHandle(menuItemDisplay);
+    delete menuList;
     ClearHandleArray(mapArray);
     CloseHandle(mapArray);
-    
-    //Or the display KV
     CloseHandle(dispKV);
     
-    //Success!
     return menu;
 }
 

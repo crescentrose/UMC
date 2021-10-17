@@ -525,7 +525,67 @@ stock AddToMemoryArray(const String:mapName[], Handle:arr, size)
 }
 
 
+enum UMCMenuItemStyle {
+    Style_Normal = 0,
+    Style_Disabled = (1<<0)
+}
+
+enum struct UMCMenuItem {
+    char name[255];
+    char display[255];
+    UMCMenuItemStyle style;
+}
+
+methodmap UMCMenuList < StringMap {
+    public UMCMenuList() {
+        return view_as<UMCMenuList>(new StringMap());
+    }
+    
+    public void AddItemList(char name[MAP_LENGTH], char display[MAP_LENGTH], UMCMenuItemStyle style = Style_Normal) {
+        UMCMenuItem item;
+
+        strcopy(item.name, sizeof(item.name), name);
+        strcopy(item.display, sizeof(item.display), display);
+        item.style = style;
+
+        this.SetArray(name, item, sizeof(item), true);
+    }
+
+    public ArrayList SortedKeys() {
+        ArrayList keys = new ArrayList(ByteCountToCells(MAP_LENGTH));
+        StringMapSnapshot snapshot = this.Snapshot();
+        char key[MAP_LENGTH];
+
+        for (int i = 0; i < snapshot.Length; i++) {
+            snapshot.GetKey(i, key, sizeof(key)); 
+            keys.PushString(key);
+        }
+
+        delete snapshot;
+        keys.Sort(Sort_Ascending, Sort_String);
+        return keys;
+    }
+}
+
+stock AddMenuListToMenu(Menu menu, UMCMenuList list)
+{
+    ArrayList sortedKeys = list.SortedKeys();
+
+    for (int i = 0; i < sortedKeys.Length; i++) {
+        char key[MAP_LENGTH];
+        sortedKeys.GetString(i, key, sizeof(key));
+
+        UMCMenuItem item;
+        list.GetArray(key, item, sizeof(item));
+
+        AddMenuItem(menu, item.name, item.display, view_as<int>(item.style));
+    }
+
+    delete sortedKeys;
+}
+
 // Adds entire array to the given menu.
+// TODO: Replace all occurences with AddMenuListToMenu
 stock AddArrayToMenu(Handle menu, Handle arr, Handle dispArr = null, Handle styleArr = null)
 {
     char map[MAP_LENGTH], displayString[MAP_LENGTH];
@@ -549,7 +609,6 @@ stock AddArrayToMenu(Handle menu, Handle arr, Handle dispArr = null, Handle styl
         AddMenuItem(menu, map, displayString, style);
     }
 }
-
 
 //Changes the map in 5 seconds.
 stock ForceChangeInFive(const String:map[], const String:reason[]="")
