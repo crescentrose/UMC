@@ -467,23 +467,19 @@ Handle BuildNominationMenu(int client, const char[] cat = INVALID_GROUP)
             FormatEx(display, sizeof(display), "%s (Nominated)", display);
             style = Style_Disabled;
         }
-        else
-        {
-            // The map was not nominated yet, add it to the user's nominations
-            // lists
-            PushArrayString(nom_menu_groups[client], groupBuff);
-            PushArrayString(nom_menu_nomgroups[client], group);
-        }
+
+        // TODO: what do these get used for?
+        PushArrayString(nom_menu_groups[client], groupBuff);
+        PushArrayString(nom_menu_nomgroups[client], group);
   
         // Add map data to the arrays.
-        PrintToServer("unplayed: adding %s as '%s' with style %d", mapBuff, display, style);
         menuList.AddItemList(mapBuff, display, style);
 
         KvRewind(map_kv);
     }
 
-    // We also want to see the recently played maps at the bottom of the menu so
-    // that people don't think we stole their belowed upward.
+    // We also want to see the recently played maps so that people don't think
+    // we stole their belowed upward.
     ArrayList recentlyPlayedMaps = view_as<ArrayList>(vote_mem_arr);
     for (int i = 0; i < recentlyPlayedMaps.Length; i++)
     {
@@ -495,7 +491,9 @@ Handle BuildNominationMenu(int client, const char[] cat = INVALID_GROUP)
             FormatEx(display, sizeof(display), "%s (Recently Played)", mapBuff);
         }
 
-        PrintToServer("played: adding %s as '%s' with style %d", mapBuff, display, style);
+        PushArrayString(nom_menu_groups[client], groupBuff);
+        PushArrayString(nom_menu_nomgroups[client], group);
+
         menuList.AddItemList(mapBuff, display, Style_Disabled);
     }
     
@@ -604,6 +602,7 @@ public Handle_NominationMenu(Handle:menu, MenuAction:action, client, param2)
             //Get the selected map.
             decl String:map[MAP_LENGTH], String:group[MAP_LENGTH], String:nomGroup[MAP_LENGTH];
             GetMenuItem(menu, param2, map, sizeof(map));
+
             GetArrayString(nom_menu_groups[client], param2, group, sizeof(group));
             GetArrayString(nom_menu_nomgroups[client], param2, nomGroup, sizeof(nomGroup));
             KvRewind(map_kv);
