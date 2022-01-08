@@ -14,10 +14,10 @@
 public Plugin:myinfo =
 {
     name        = "[UMC] End of Map Vote",
-    author      = "Previous:Steell,Powerlord - Current: Mr.Silence",
+    author      = "Steell, Powerlord, Mr.Silence, VIORA",
     description = "Extends Ultimate Mapchooser to allow End of Map Votes.",
     version     = PL_VERSION,
-    url         = "http://forums.alliedmods.net/showthread.php?t=134190"
+    url         = "https://github.com/crescentrose/umc"
 };
 
 ////----CONVARS-----/////
@@ -324,6 +324,7 @@ public OnPluginStart()
     if (cvar_maxrounds != INVALID_HANDLE || cvar_winlimit != INVALID_HANDLE)
     {
         HookEvent("round_end",                Event_RoundEnd); //Generic
+        HookEventEx("teamplay_round_stalemate", Event_RoundEndTF2); // TF2
         HookEventEx("teamplay_win_panel",     Event_RoundEndTF2); //TF2
         HookEventEx("arena_win_panel",        Event_RoundEndTF2); //TF2
         HookEventEx("teamplay_restart_round", Event_RestartRound); //TF2  
@@ -511,7 +512,11 @@ public Event_RoundEnd(Handle:evnt, const String:name[], bool:dontBroadcast)
 //Called when a round ends in tf2.
 public Event_RoundEndTF2(Handle:evnt, const String:name[], bool:dontBroadcast)
 {
-    if (vote_roundend)
+    int timeleft;
+    GetMapTimeLeft(timeleft);
+
+    // we always want to trigger a vote if there is no more time on the clock
+    if (vote_roundend || timeleft == 0)
     {
         vote_roundend = false;
         StartMapVoteRoundEnd();

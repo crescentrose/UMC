@@ -220,9 +220,9 @@ public OnPluginStart()
     RegAdminCmd("sm_umc_displaymaplists", Command_DisplayMapLists, ADMFLAG_CHANGEMAP, "Displays the current maplist for all UMC modules.");
 
     // Hook round end events
-    HookEvent("round_end",            Event_RoundEnd); //Generic
-    HookEventEx("teamplay_win_panel", Event_RoundEnd); //TF2
-    HookEventEx("arena_win_panel",    Event_RoundEnd); //TF2
+    HookEvent("round_end", Event_RoundEnd); // Generic
+    HookEventEx("teamplay_win_panel", Event_RoundEnd); // TF2
+    HookEventEx("arena_win_panel", Event_RoundEnd); // TF2
 
     // Initialize our vote arrays
     nominations_arr = new ArrayList();
