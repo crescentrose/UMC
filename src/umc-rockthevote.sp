@@ -1,105 +1,52 @@
-/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- *                              Ultimate Mapchooser - Rock The Vote                              *
- * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
-/*************************************************************************
-*************************************************************************
-This plugin is free software: you can redistribute 
-it and/or modify it under the terms of the GNU General Public License as
-published by the Free Software Foundation, either version 3 of the License, or
-later version. 
-
-This plugin is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this plugin.  If not, see <http://www.gnu.org/licenses/>.
-*************************************************************************
-*************************************************************************/  
 #pragma semicolon 1
 
 #include <sourcemod>
 #include <umc-core>
 #include <umc_utils>
 
-//Plugin Information
-public Plugin:myinfo =
+#pragma newdecls required
+
+public Plugin myinfo =
 {
     name        = "[UMC] Rock The Vote",
-    author      = "Previous:Steell,Powerlord - Current: Mr.Silence",
+    author      = "Steell, Powerlord, Mr.Silence, VIORA",
     description = "Extends Ultimate Mapchooser to provide RTV map voting.",
     version     = PL_VERSION,
-    url         = "http://forums.alliedmods.net/showthread.php?t=134190"
+    url         = "https://github.com/crescentrose/UMC"
 };
 
-////----CONVARS-----/////
-new Handle:cvar_filename             = INVALID_HANDLE;
-new Handle:cvar_scramble             = INVALID_HANDLE;
-new Handle:cvar_vote_time            = INVALID_HANDLE;
-new Handle:cvar_strict_noms          = INVALID_HANDLE;
-new Handle:cvar_runoff               = INVALID_HANDLE;
-new Handle:cvar_runoff_sound         = INVALID_HANDLE;
-new Handle:cvar_runoff_max           = INVALID_HANDLE;
-new Handle:cvar_vote_allowduplicates = INVALID_HANDLE;
-new Handle:cvar_vote_threshold       = INVALID_HANDLE;
-new Handle:cvar_fail_action          = INVALID_HANDLE;
-new Handle:cvar_runoff_fail_action   = INVALID_HANDLE;
-new Handle:cvar_rtv_enable           = INVALID_HANDLE;
-new Handle:cvar_rtv_changetime       = INVALID_HANDLE;
-new Handle:cvar_rtv_delay            = INVALID_HANDLE;
-new Handle:cvar_rtv_minplayers       = INVALID_HANDLE;
-new Handle:cvar_rtv_postaction       = INVALID_HANDLE;
-new Handle:cvar_rtv_needed           = INVALID_HANDLE;
-new Handle:cvar_rtv_interval         = INVALID_HANDLE;
-new Handle:cvar_rtv_mem              = INVALID_HANDLE;
-new Handle:cvar_rtv_catmem           = INVALID_HANDLE;
-new Handle:cvar_rtv_type             = INVALID_HANDLE;
-new Handle:cvar_rtv_dontchange       = INVALID_HANDLE;
-new Handle:cvar_rtv_startsound       = INVALID_HANDLE;
-new Handle:cvar_rtv_endsound         = INVALID_HANDLE;
-new Handle:cvar_voteflags            = INVALID_HANDLE;
-new Handle:cvar_enterflags           = INVALID_HANDLE;
-new Handle:cvar_enterbonusflags      = INVALID_HANDLE;
-new Handle:cvar_enterbonusamt        = INVALID_HANDLE;
-////----/CONVARS-----/////
+ConVar cvar_filename, cvar_scramble, cvar_vote_time, cvar_strict_noms,
+    cvar_runoff, cvar_runoff_max, cvar_vote_allowduplicates,
+    cvar_vote_threshold, cvar_fail_action, cvar_runoff_fail_action, cvar_rtv_enable,
+    cvar_rtv_changetime, cvar_rtv_delay, cvar_rtv_minplayers, cvar_rtv_postaction,
+    cvar_rtv_needed, cvar_rtv_interval, cvar_rtv_mem, cvar_rtv_catmem,
+    cvar_rtv_type, cvar_rtv_dontchange, cvar_voteflags,
+    cvar_enterflags, cvar_enterbonusflags, cvar_enterbonusamt;
 
-//Mapcycle KV
-new Handle:map_kv = INVALID_HANDLE;        
-new Handle:umc_mapcycle = INVALID_HANDLE;
+KeyValues umc_mapcycle, map_kv;
 
-//Memory queues.
-new Handle:vote_mem_arr = INVALID_HANDLE;
-new Handle:vote_catmem_arr = INVALID_HANDLE;
+// Memory queues.
+ArrayList vote_catmem_arr, vote_mem_arr;
 
-//Array of players who have RTV'd
-new Handle:rtv_clients = INVALID_HANDLE;
+// Array of players who have RTV'd
+ArrayList rtv_clients;
 
-//Stores whether or not players have seen the long RTV message.
-new bool:rtv_message[MAXPLAYERS+1];
+// Stores whether or not players have seen the long RTV message.
+bool rtv_message[MAXPLAYERS+1];
 
-//Keeps track of a delay before we are able to RTV.
-new Float:rtv_delaystart;
+// Keeps track of a delay before we are able to RTV.
+float rtv_delaystart;
 
-//How many people are required to trigger an RTV.
-new rtv_threshold;
+// How many people are required to trigger an RTV.
+int rtv_threshold;
 
-//Flags
-new bool:rtv_completed;    //Has an rtv been completed?
-new bool:rtv_enabled;      //Is RTV enabled right now?
-new bool:vote_completed;   //Has UMC completed a vote?
-new bool:rtv_inprogress;   //Is the rtv vote in progress?
+// Flags
+bool rtv_completed;    //Has an rtv been completed?
+bool rtv_enabled;      //Is RTV enabled right now?
+bool vote_completed;   //Has UMC completed a vote?
+bool rtv_inprogress;   //Is the rtv vote in progress?
 
-//Sounds to be played at the start and end of votes.
-new String:vote_start_sound[PLATFORM_MAX_PATH], String:vote_end_sound[PLATFORM_MAX_PATH],
-    String:runoff_sound[PLATFORM_MAX_PATH];
-
-//************************************************************************************************//
-//                                        SOURCEMOD EVENTS                                        //
-//************************************************************************************************//
-//Called when the plugin is finished loading.
-public OnPluginStart()
-{
+public void OnPluginStart() {
     cvar_enterbonusflags = CreateConVar(
         "sm_umc_rtv_enteradminflags_bonusflags",
         "",
@@ -166,32 +113,14 @@ public OnPluginStart()
         "Specifies a maximum number of runoff votes to run for any given vote.\n 0 disables runoff votes.",
         0, true, 0.0
     );
-    
-    cvar_runoff_sound = CreateConVar(
-        "sm_umc_rtv_runoff_sound",
-        "",
-        "If specified, this sound file (relative to sound folder) will be played at the beginning of a runoff vote. If not specified, it will use the normal start vote sound."
-    );
-    
+
     cvar_rtv_catmem = CreateConVar(
         "sm_umc_rtv_groupexclude",
         "0",
         "Specifies how many past map groups to exclude from RTVs.",
         0, true, 0.0
     );
-    
-    cvar_rtv_startsound = CreateConVar(
-        "sm_umc_rtv_startsound",
-        "",
-        "Sound file (relative to sound folder) to play at the start of a vote."
-    );
-    
-    cvar_rtv_endsound = CreateConVar(
-        "sm_umc_rtv_endsound",
-        "",
-        "Sound file (relative to sound folder) to play at the completion of a vote."
-    );
-    
+
     cvar_strict_noms = CreateConVar(
         "sm_umc_rtv_nominate_strict",
         "0",
@@ -307,23 +236,18 @@ public OnPluginStart()
     HookConVarChange(cvar_rtv_needed, Handle_ThresholdChange);
     
     //Initialize our memory arrays
-    new numCells = ByteCountToCells(MAP_LENGTH);
-    vote_mem_arr    = CreateArray(numCells);
-    vote_catmem_arr = CreateArray(numCells);
+    int numCells = ByteCountToCells(MAP_LENGTH);
+    vote_mem_arr = new ArrayList(numCells);
+    vote_catmem_arr = new ArrayList(numCells);
     
     //Initialize rtv array
-    rtv_clients = CreateArray();
+    rtv_clients = new ArrayList();
     
     //Load the translations file
     LoadTranslations("ultimate-mapchooser.phrases");
 }
 
-//************************************************************************************************//
-//                                           GAME EVENTS                                          //
-//************************************************************************************************//
-//Called after all config files were executed.
-public OnConfigsExecuted()
-{
+public void OnConfigsExecuted() {
     //We have not completed an RTV.
     rtv_completed = false;
     rtv_enabled = false;
@@ -335,181 +259,115 @@ public OnConfigsExecuted()
     //Set the amount of time required before players are able to RTV.
     rtv_delaystart = GetConVarFloat(cvar_rtv_delay);
     
-    new bool:reloaded = ReloadMapcycle();
+    bool reloaded = ReloadMapcycle();
     
     //Setup RTV if the RTV cvar is enabled.
-    if (reloaded && GetConVarBool(cvar_rtv_enable))
-    {
+    if (reloaded && GetConVarBool(cvar_rtv_enable)) {
         rtv_enabled = true;
     
-        //Set RTV threshold.
         UpdateRTVThreshold();
-        
-        //Make timer to activate RTV (player's cannot RTV before this timer finishes).
         MakeRTVTimer();
     }
     
     //Grab the name of the current map.
-    decl String:mapName[MAP_LENGTH];
+    char mapName[MAP_LENGTH], groupName[MAP_LENGTH];
     GetCurrentMap(mapName, sizeof(mapName));
-    
-    decl String:groupName[MAP_LENGTH];
     UMC_GetCurrentMapGroup(groupName, sizeof(groupName));
     
     if (reloaded && StrEqual(groupName, INVALID_GROUP, false))
-    {
         KvFindGroupOfMap(umc_mapcycle, mapName, groupName, sizeof(groupName));
-    }
     
-    //Add the map to all the memory queues.
-    new mapmem = GetConVarInt(cvar_rtv_mem);
-    new catmem = GetConVarInt(cvar_rtv_catmem);
+    // Add the map to all the memory queues.
+    int mapmem = GetConVarInt(cvar_rtv_mem);
+    int catmem = GetConVarInt(cvar_rtv_catmem);
     AddToMemoryArray(mapName, vote_mem_arr, mapmem);
     AddToMemoryArray(groupName, vote_catmem_arr, (mapmem > catmem) ? mapmem : catmem);
     
     if (reloaded)
-    {
         RemovePreviousMapsFromCycle();
-    }
 }
 
-public OnMapStart()
-{
-    //Setup vote sounds.
-    SetupVoteSounds();
-}
-
-//Called when a client enters the server. Required for updating the RTV threshold.
-public OnClientPutInServer(client)
-{
-    //Update the RTV threshold if RTV is enabled.
+public void OnClientPutInServer(int client) {
     if (GetConVarBool(cvar_rtv_enable))
-    {
         UpdateRTVThreshold();
-    }
 }
 
-//Called when a player types in chat. Required to handle user commands.
-public Action:OnPlayerChat(client, const String:command[], argc)
-{
-    //Return immediately if nothing was typed.
+public Action OnPlayerChat(int client, const char[] command, int argc) {
     if (argc == 0) 
-    {
         return Plugin_Continue;
-    }
     
-    //Get what was typed.
-    decl String:text[13];
+    char text[13];
     GetCmdArg(1, text, sizeof(text));
     
     // Handle RTV client-command if RTV is enabled AND the client typed a valid RTV command AND
     // the required number of clients for RTV hasn't been reached already AND the client isn't the console.
     if (StrEqual(text, "rtv", false) || StrEqual(text, "rockthevote", false))
-    {
         AttemptRTV(client);
-    }
+
     return Plugin_Continue;
 }
 
-//Called after a client has left the server. Required for updating the RTV threshold.
-public OnClientDisconnect_Post(client)
-{
-    //Remove this client from people who have seen the extended RTV message.
+public void OnClientDisconnect_Post(int client) {
+    // Remove this client from people who have seen the extended RTV message.
     rtv_message[client] = false;
     
-    new index;
-    //Remove the client from the RTV array if the client is in the array to begin with.
+    // Remove the client from the RTV array if the client is in the array to begin with.
+    int index;
     while ((index = FindValueInArray(rtv_clients, client)) != -1)
-    {
         RemoveFromArray(rtv_clients, index);
-    }
     
-    //Recalculate the RTV threshold.
+    // Recalculate the RTV threshold.
     UpdateRTVThreshold();
     
     //Start RTV if we haven't had an RTV already AND the new amount of players on the server as passed the required threshold.
-    if (!rtv_completed && GetArraySize(rtv_clients) >= rtv_threshold)
-    {
+    if (!rtv_completed && GetArraySize(rtv_clients) >= rtv_threshold) {
         PrintToChatAll("[UMC] %t", "Player Disconnect RTV");
         StartRTV();
     }
 }
 
-//Called at the end of a map.
-public OnMapEnd()
-{
-    //Empty array of clients who have entered RTV.
+public void OnMapEnd() {
     ClearArray(rtv_clients);
 }
 
-//************************************************************************************************//
-//                                            COMMANDS                                            //
-//************************************************************************************************//
-//sm_rtv or sm_rockthevote
-public Action:Command_RTV(client, args)
-{
+// sm_rtv or sm_rockthevote
+public Action Command_RTV(int client, int args) {
     AttemptRTV(client);
     return Plugin_Handled;
 }
 
-//************************************************************************************************//
-//                                              SETUP                                             //
-//************************************************************************************************//
-//Parses the mapcycle file and returns a KV handle representing the mapcycle.
-Handle:GetMapcycle()
-{
-    //Grab the file name from the cvar.
-    decl String:filename[PLATFORM_MAX_PATH];
+// Parses the mapcycle file and returns a KV handle representing the mapcycle.
+static KeyValues GetMapcycle() {
+    // Grab the file name from the cvar.
+    char filename[PLATFORM_MAX_PATH];
     GetConVarString(cvar_filename, filename, sizeof(filename));
     
-    //Get the kv handle from the file.
-    new Handle:result = GetKvFromFile(filename, "umc_rotation");
+    // Get the kv handle from the file.
+    KeyValues result = view_as<KeyValues>(GetKvFromFile(filename, "umc_rotation"));
     
-    //Log an error and return empty handle if the mapcycle file failed to parse.
-    if (result == INVALID_HANDLE)
-    {
+    if (result == INVALID_HANDLE) {
         LogError("SETUP: Mapcycle failed to load!");
-        return INVALID_HANDLE;
+        return null;
     }
     
-    //Success!
     return result;
 }
 
-//Sets up the vote sounds.
-SetupVoteSounds()
-{
-    //Grab sound files from cvars.
-    GetConVarString(cvar_rtv_startsound, vote_start_sound, sizeof(vote_start_sound));
-    GetConVarString(cvar_rtv_endsound, vote_end_sound, sizeof(vote_end_sound));
-    GetConVarString(cvar_runoff_sound, runoff_sound, sizeof(runoff_sound));
-    
-    //Gotta cache 'em all!
-    CacheSound(vote_start_sound);
-    CacheSound(vote_end_sound);
-    CacheSound(runoff_sound);
-}
-
-//Reloads the mapcycle. Returns true on success, false on failure.
-bool:ReloadMapcycle()
+// Reloads the mapcycle. Returns true on success, false on failure.
+static bool ReloadMapcycle()
 {
     if (umc_mapcycle != INVALID_HANDLE)
-    {
-        CloseHandle(umc_mapcycle);
-        umc_mapcycle = INVALID_HANDLE;
-    }
+        delete umc_mapcycle;
+
     if (map_kv != INVALID_HANDLE)
-    {
-        CloseHandle(map_kv);
-        map_kv = INVALID_HANDLE;
-    }
+        delete map_kv;
+
     umc_mapcycle = GetMapcycle();
     
     return umc_mapcycle != INVALID_HANDLE;
 }
 
-RemovePreviousMapsFromCycle()
-{
+static void RemovePreviousMapsFromCycle() {
     map_kv = CreateKeyValues("umc_rotation");
     KvCopySubkeys(umc_mapcycle, map_kv);
     FilterMapcycleFromArrays(
@@ -520,115 +378,89 @@ RemovePreviousMapsFromCycle()
     );
 }
 
-//************************************************************************************************//
-//                                          CVAR CHANGES                                          //
-//************************************************************************************************//
-//Called when the cvar to enable RTVs has been changed.
-public Handle_RTVChange(Handle:convar, const String:oldVal[], const String:newVal[])
-{
-    //If the new value is 0, we ignore the change until next map.
-    //Update (in this case set) the RTV threshold if the new value of the changed cvar is 1.
+// Called when the cvar to enable RTVs has been changed.
+public void Handle_RTVChange(ConVar convar, const char[] oldVal, const char[] newVal) {
+    // If the new value is 0, we ignore the change until next map.
+    // Update (in this case set) the RTV threshold if the new value of the changed cvar is 1.
     if (StringToInt(newVal) == 1)
-    {
         UpdateRTVThreshold();
-    }
 }
 
-//Called when the number of excluded previous maps from RTVs has changed.
-public Handle_RTVMemoryChange(Handle:convar, const String:oldValue[], const String:newValue[])
-{
-    //Trim the memory array for RTVs.
-    //We pass 1 extra to the argument in order to account for the current map, which should always be excluded.
+// Called when the number of excluded previous maps from RTVs has changed.
+public void Handle_RTVMemoryChange(ConVar convar, const char[] oldValue, const char[] newValue) {
+    // Trim the memory array for RTVs.
+    // We pass 1 extra to the argument in order to account for the current map, which should always be excluded.
     TrimArray(vote_mem_arr, StringToInt(newValue));
 }
 
 //Called when the cvar specifying the required RTV threshold percentage has changed.
-public Handle_ThresholdChange(Handle:cvar, const String:oldVal[], const String:newVal[])
-{
-    //Recalculate the required threshold.
+public void Handle_ThresholdChange(ConVar convar, const char[] oldVal, const char[] newVal) {
+    // Recalculate the required threshold.
     UpdateRTVThreshold();
     
-    //Start an RTV if the amount of clients who have RTVd is greater than the new RTV threshold.
+    // Start an RTV if the amount of clients who have RTVd is greater than the new RTV threshold.
     if (GetArraySize(rtv_clients) >= rtv_threshold)
-    {
         StartRTV();
-    }
 }
 
-//************************************************************************************************//
-//                                          ROCK THE VOTE                                         //
-//************************************************************************************************//
-//Tries to enter the given client into RTV.
-AttemptRTV(client)
-{
-    //Get the number of clients who have RTV'd.
-    new size = GetArraySize(rtv_clients);
+// Tries to enter the given client into RTV.
+static void AttemptRTV(int client) {
+    // Get the number of clients who have RTV'd.
+    int size = GetArraySize(rtv_clients);
 
     if (!rtv_enabled || !GetConVarBool(cvar_rtv_enable) || size >= rtv_threshold || client == 0)
-    {
         return;
-    }
     
-    decl String:flags[64];
+    char flags[64];
     GetConVarString(cvar_enterflags, flags, sizeof(flags));
     
-    if (!ClientHasAdminFlags(client, flags))
-    {
+    if (!ClientHasAdminFlags(client, flags)) {
         PrintToChat(client, "[UMC] %t","No RTV Admin");
         return;
     }
         
-    new clients = GetRealClientCount();
-    new minPlayers = GetConVarInt(cvar_rtv_minplayers);
+    int clients = GetRealClientCount();
+    int minPlayers = GetConVarInt(cvar_rtv_minplayers);
 
-    //Print a message if an RTV has already been completed OR a vote has already been completed and RTVs after votes aren't allowed.
-    if (rtv_completed || (vote_completed && GetConVarInt(cvar_rtv_postaction) == 1))
-    {
+    if (rtv_completed || (vote_completed && GetConVarInt(cvar_rtv_postaction) == 1)) {
+        // Print a message if an RTV has already been completed OR a vote has already been completed and RTVs after votes aren't allowed.
         PrintToChat(client, "[UMC] %t", "No RTV Nextmap");
         return;
     }
-    //Otherwise, print a message if the number of players on the server is less than the minimum required to RTV.
-    else if (clients < minPlayers)
-    {
+    else if (clients < minPlayers) {
+        //Otherwise, print a message if the number of players on the server is less than the minimum required to RTV.
         PrintToChat(client, "[UMC] %t", "No RTV Player Count", minPlayers - clients);
         return;
     }
-    //Otherwise, print a message if it is too early to RTV.
-    else if (rtv_delaystart > 0)
-    {
+    else if (rtv_delaystart > 0) {
+        //Otherwise, print a message if it is too early to RTV.
         PrintToChat(client, "[UMC] %t", "No RTV Time", rtv_delaystart);
         return;
     }
-    //Otherwise, accept RTV command if the client hasn't already RTV'd.
-    else if (FindValueInArray(rtv_clients, client) == -1)
-    {
-        //Get the flags for bonus RTV entrance points
+    else if (FindValueInArray(rtv_clients, client) == -1) {
+        // Otherwise, accept RTV command if the client hasn't already RTV'd.
+        // Get the flags for bonus RTV entrance points
         GetConVarString(cvar_enterbonusflags, flags, sizeof(flags));
         
-        //Calc the amount of entrance points for this user
-        new amt = strlen(flags) > 0 && ClientHasAdminFlags(client, flags) ? GetConVarInt(cvar_enterbonusamt) : 1;
+        // Calc the amount of entrance points for this user
+        int amt = strlen(flags) > 0 && ClientHasAdminFlags(client, flags) ? GetConVarInt(cvar_enterbonusamt) : 1;
 
-        //Apply entrance points
+        // Apply entrance points
         size += amt;
-        while (amt-- > 0)
-        {
-            //Add client to RTV array.
+        while (amt-- > 0) {
+            // Add client to RTV array.
             PushArrayCell(rtv_clients, client);
         }
         
-        //Get the name of the client.
-        decl String:name[MAX_NAME_LENGTH];
+        // Get the name of the client.
+        char name[MAX_NAME_LENGTH];
         GetClientName(client, name, sizeof(name));
         
-        //Display an RTV message to a client for each client on the server.
-        for (new i = 1; i <= MaxClients; i++)
-        {
-            if (IsClientInGame(i))
-            {
-                //Display initial (long) RTV message if the client hasn't seen it yet.
-                if (!rtv_message[i])
-                {
-                    //Remember that the client has now seen this message.
+        // Display an RTV message to a client for each client on the server.
+        for (int i = 1; i <= MaxClients; i++) {
+            if (IsClientInGame(i)) {
+                if (!rtv_message[i]) {
+                    // Display initial (long) RTV message if the client hasn't seen it yet.
                     rtv_message[i] = true;
                     PrintToChat(
                         i, 
@@ -640,8 +472,8 @@ AttemptRTV(client)
                             rtv_threshold - size
                     );
                 }
-                else //Otherwise, print the standard message.
-                {
+                else {
+                    // Otherwise, print the standard message.
                     PrintToChat(
                         i,
                         "[UMC] %t (%t)",
@@ -654,25 +486,22 @@ AttemptRTV(client)
             }
         }
         
-        //Start RTV if the new size has surpassed the threshold required to RTV.
-        if (size >= rtv_threshold)
-        {
-            //Start the vote if there isn't one happening already.
-            if (UMC_IsNewVoteAllowed("core"))
-            {
+        // Start RTV if the new size has surpassed the threshold required to RTV.
+        if (size >= rtv_threshold) {
+            if (UMC_IsNewVoteAllowed("core")) {
+                // Start the vote if there isn't one happening already.
                 PrintToChatAll("[UMC] %t", "RTV Start");
                 StartRTV();
             }
-            else //Otherwise, display a message.
-            {
+            else {
+                // Otherwise, display a message.
                 PrintToChat(client, "[UMC] %t", "Vote In Progress");
                 MakeRetryVoteTimer(StartRTV);
             }
         }
     }
-    //Otherwise, display a message to the client if the client has already RTV'd.
-    else if (FindValueInArray(rtv_clients, client) != -1)
-    {
+    else if (FindValueInArray(rtv_clients, client) != -1) {
+        //Otherwise, display a message to the client if the client has already RTV'd.
         PrintToChat(
             client,
             "[UMC] %t (%t)",
@@ -683,173 +512,155 @@ AttemptRTV(client)
     }
 }
 
-//Creates the RTV timer. While this timer is active, players are not able to RTV.
-MakeRTVTimer()
-{
-    //We are re-enabling RTV at this point.
+// Creates the RTV timer. While this timer is active, players are not able to RTV.
+static void MakeRTVTimer() {
+    // We are re-enabling RTV at this point.
     rtv_completed = false;
     
-    if (rtv_delaystart > 0)
-    {
-        //Log a message
+    if (rtv_delaystart > 0) {
+        // Log a message
         LogUMCMessage("RTV will be made available in %.f seconds.", rtv_delaystart);
         
-        //Create timer that lasts every second.
+        // Create timer that lasts every second.
         CreateTimer(1.0, Handle_RTVTimer, INVALID_HANDLE, TIMER_FLAG_NO_MAPCHANGE | TIMER_REPEAT);
     }
-    else
-    {
-        //rtv_enabled = true;
+    else {
         LogUMCMessage("RTV is now available.");
     }
 }
 
-//Callback for the RTV timer, is called every second the timer is running.
-public Action:Handle_RTVTimer(Handle:timer)
+// Callback for the RTV timer, is called every second the timer is running.
+public Action Handle_RTVTimer(Handle timer)
 {
-    //Continue ticking if there is still time left on the counter.
+    // Continue ticking if there is still time left on the counter.
     if (--rtv_delaystart >= 0.0)
-    {
         return Plugin_Continue;
-    }
     
     LogUMCMessage("RTV is now available.");
     return Plugin_Stop;
 }
 
-//Recalculated the RTV threshold based off of the given playercount.
-UpdateRTVThreshold()
-{
-    decl String:flags[64];
+// Recalculated the RTV threshold based off of the given playercount.
+static void UpdateRTVThreshold() {
+    char flags[64];
+
     GetConVarString(cvar_voteflags, flags, sizeof(flags));
-    new count = GetClientWithFlagsCount(flags);
+    int count = GetClientWithFlagsCount(flags);
     rtv_threshold = (count > 1) ? RoundToCeil(float(count) * GetConVarFloat(cvar_rtv_needed)) : 1;
 }
 
-//Starts an RTV.
-public StartRTV()
-{
+// Starts an RTV.
+public void StartRTV() {
     LogUMCMessage("Starting RTV.");
     
-    //Clear the array of clients who have entered RTV.
+    // Clear the array of clients who have entered RTV.
     ClearArray(rtv_clients);
     rtv_completed = true;
-    new postAction = GetConVarInt(cvar_rtv_postaction);
+    int postAction = GetConVarInt(cvar_rtv_postaction);
     
-    //Change the map immediately if there has already been an end-of-map vote AND
-    //the cvar that handles RTV actions after end-of-map votes specifies to change the map.
-    if (vote_completed && postAction == 0)
-    {
-        //Get the next map set by the vote.
-        decl String:temp[MAP_LENGTH];
-        GetNextMap(temp, sizeof(temp));
+    // Change the map immediately if there has already been an end-of-map vote AND
+    // the cvar that handles RTV actions after end-of-map votes specifies to change the map.
+    if (vote_completed && postAction == 0) {
+        // Get the next map set by the vote.
+        char nextMap[MAP_LENGTH];
+        GetNextMap(nextMap, sizeof(nextMap));
         
         LogUMCMessage("End of map vote has already been completed, changing map.");
         
-        //Change to it.
-        ForceChangeInFive(temp, "RTV");
+        // Change to it.
+        ForceChangeInFive(nextMap, "RTV");
     }
-    //Otherwise, build the RTV vote if a vote hasn't already been completed.
-    else if (!vote_completed || postAction == 2)
-    {
-        //Do nothing if there is a vote already in progress.
-        if (!UMC_IsNewVoteAllowed("core")) 
-        {
+    // Otherwise, build the RTV vote if a vote hasn't already been completed.
+    else if (!vote_completed || postAction == 2) {
+        // Do nothing if there is a vote already in progress.
+        if (!UMC_IsNewVoteAllowed("core")) {
             LogUMCMessage("There is a vote already in progress, cannot start a new vote.");
             MakeRetryVoteTimer(StartRTV);
             return;
         }
         
         rtv_inprogress = true;
-        decl String:flags[64];
+        char flags[64];
         GetConVarString(cvar_voteflags, flags, sizeof(flags));
         
-        new clients[MAXPLAYERS+1];
-        new numClients;
+        int numClients, clients[MAXPLAYERS+1];
         GetClientsWithFlags(flags, clients, sizeof(clients), numClients);
         
         //Start the UMC vote.
-        new bool:result = UMC_StartVote(
+        bool result = UMC_StartVote(
             "core",
-            map_kv,                                                     //Mapcycle
-            umc_mapcycle,                                               //Complete Mapcycle
-            UMC_VoteType:GetConVarInt(cvar_rtv_type),                   //Vote Type (map, group, tiered)
-            GetConVarInt(cvar_vote_time),                               //Vote duration
-            GetConVarBool(cvar_scramble),                               //Scramble
-            vote_start_sound,                                           //Start Sound
-            vote_end_sound,                                             //End Sound
-            false,                                                      //Extend option
-            0.0,                                                        //How long to extend the timelimit by,
-            0,                                                          //How much to extend the roundlimit by,
-            0,                                                          //How much to extend the fraglimit by,
-            GetConVarBool(cvar_rtv_dontchange),                         //Don't Change option
-            GetConVarFloat(cvar_vote_threshold),                        //Threshold
-            UMC_ChangeMapTime:GetConVarInt(cvar_rtv_changetime),        //Success Action (when to change the map)
-            UMC_VoteFailAction:GetConVarInt(cvar_fail_action),          //Fail Action (runoff / nothing)
-            GetConVarInt(cvar_runoff),                                  //Max Runoffs
-            GetConVarInt(cvar_runoff_max),                              //Max maps in the runoff
-            UMC_RunoffFailAction:GetConVarInt(cvar_runoff_fail_action), //Runoff Fail Action
-            runoff_sound,                                               //Runoff Sound
-            GetConVarBool(cvar_strict_noms),                            //Nomination Strictness
-            GetConVarBool(cvar_vote_allowduplicates),                   //Ignore Duplicates
+            map_kv,                                                               //Mapcycle
+            umc_mapcycle,                                                         //Complete Mapcycle
+            view_as<UMC_VoteType>(GetConVarInt(cvar_rtv_type)),                   //Vote Type (map, group, tiered)
+            GetConVarInt(cvar_vote_time),                                         //Vote duration
+            GetConVarBool(cvar_scramble),                                         //Scramble
+            "",                                                                   //Start Sound
+            "",                                                                   //End Sound
+            false,                                                                //Extend option
+            0.0,                                                                  //How long to extend the timelimit by,
+            0,                                                                    //How much to extend the roundlimit by,
+            0,                                                                    //How much to extend the fraglimit by,
+            GetConVarBool(cvar_rtv_dontchange),                                   //Don't Change option
+            GetConVarFloat(cvar_vote_threshold),                                  //Threshold
+            view_as<UMC_ChangeMapTime>(GetConVarInt(cvar_rtv_changetime)),        //Success Action (when to change the map)
+            view_as<UMC_VoteFailAction>(GetConVarInt(cvar_fail_action)),          //Fail Action (runoff / nothing)
+            GetConVarInt(cvar_runoff),                                            //Max Runoffs
+            GetConVarInt(cvar_runoff_max),                                        //Max maps in the runoff
+            view_as<UMC_RunoffFailAction>(GetConVarInt(cvar_runoff_fail_action)), //Runoff Fail Action
+            "",                                                                   //Runoff Sound
+            GetConVarBool(cvar_strict_noms),                                      //Nomination Strictness
+            GetConVarBool(cvar_vote_allowduplicates),                             //Ignore Duplicates
             clients,
             numClients
         );
         
         if (!result)
-        {
             LogUMCMessage("Could not start UMC vote.");
-        }
     }
 }
 
-//************************************************************************************************//
-//                                   ULTIMATE MAPCHOOSER EVENTS                                   //
-//************************************************************************************************//
-//Called when a vote fails, either due to Don't Change or no votes.
-public UMC_OnVoteFailed()
-{
-    if (rtv_inprogress)
-    {
+// Called when a vote fails, either due to Don't Change or no votes.
+public int UMC_OnVoteFailed() {
+    if (rtv_inprogress) {
         rtv_inprogress = false;
         vote_completed = false;
         rtv_delaystart = GetConVarFloat(cvar_rtv_interval);
         MakeRTVTimer();
     }
+
+    return 0; // compatibility
 }
 
 //Called when UMC has set a next map.
-public UMC_OnNextmapSet(Handle:kv, const String:map[], const String:group[], const String:display[])
-{
+public int UMC_OnNextmapSet(Handle kv, const char[] map, const char[] group, const char[] display) {
     vote_completed = true;
     rtv_inprogress = false;
 }
 
-//Called when UMC requests that the mapcycle should be reloaded.
-public UMC_RequestReloadMapcycle()
-{
-    if (!ReloadMapcycle())
-    {
+// Called when UMC requests that the mapcycle should be reloaded.
+public int UMC_RequestReloadMapcycle() {
+    if (!ReloadMapcycle()) {
         rtv_enabled = false;
     }
-    else
-    {
+    else {
         RemovePreviousMapsFromCycle();
     }
+
+    return 0; // compatibility
 }
 
-//Called when UMC requests that the mapcycle is printed to the console.
-public UMC_DisplayMapCycle(client, bool:filtered)
-{
+// Called when UMC requests that the mapcycle is printed to the console.
+public int UMC_DisplayMapCycle(int client, bool filtered) {
     PrintToConsole(client, "Module: Rock The Vote");
-    if (filtered)
-    {
-        new Handle:filteredMapcycle = UMC_FilterMapcycle(map_kv, umc_mapcycle, false, true);
+
+    if (filtered) {
+        KeyValues filteredMapcycle = view_as<KeyValues>(UMC_FilterMapcycle(map_kv, umc_mapcycle, false, true));
         PrintKvToConsole(filteredMapcycle, client);
-        CloseHandle(filteredMapcycle);
+        delete filteredMapcycle;
     }
-    else
-    {
+    else {
         PrintKvToConsole(umc_mapcycle, client);
     }
+
+    return 0; // compatibility
 }
