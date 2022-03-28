@@ -37,10 +37,10 @@ new Handle:cvar_logging;
 public Plugin:myinfo =
 {
     name        = "[UMC] Native Voting",
-    author      = "Previous:Steell,Powerlord - Current: Mr.Silence",
+    author      = "Steell, Powerlord, Mr.Silence, VIORA",
     description = "Extends Ultimate Mapchooser to allow usage of Native Votes.",
     version     = PL_VERSION,
-    url         = "http://forums.alliedmods.net/showthread.php?t=134190"
+    url         = "https://github.com/crescentrose/UMC"
 };
 
 

@@ -227,7 +227,6 @@ public void OnPluginStart() {
     
     //Make listeners for player chat. Needed to recognize chat commands ("rtv", etc.)
     AddCommandListener(OnPlayerChat, "say");
-    AddCommandListener(OnPlayerChat, "say2"); //Insurgency Only
     AddCommandListener(OnPlayerChat, "say_team");
 
     //Hook all necessary cvar changes

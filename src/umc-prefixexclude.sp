@@ -27,10 +27,10 @@ along with this plugin.  If not, see <http://www.gnu.org/licenses/>.
 public Plugin:myinfo =
 {
     name = "[UMC] Prefix Exclusion",
-    author = "Previous:Steell,Powerlord - Current: Mr.Silence",
+    author = "Steell, Powerlord, Mr.Silence, VIORA",
     description = "Excludes maps with the same prefix from being played consecutively.",
     version = PL_VERSION,
-    url = "http://forums.alliedmods.net/showthread.php?t=134190"
+    url = "https://github.com/crescentrose/UMC"
 }
 
 new Handle:cvar_nom_ignore = INVALID_HANDLE;

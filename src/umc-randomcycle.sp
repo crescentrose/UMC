@@ -29,10 +29,10 @@ along with this plugin.  If not, see <http://www.gnu.org/licenses/>.
 public Plugin:myinfo =
 {
     name        = "[UMC] Random Cycle",
-    author      = "Previous:Steell,Powerlord - Current: Mr.Silence",
+    author      = "Steell, Powerlord, Mr.Silence, VIORA",
     description = "Extends Ultimate Mapchooser to provide random selecting of the next map.",
     version     = PL_VERSION,
-    url         = "http://forums.alliedmods.net/showthread.php?t=134190"
+    url         = "https://github.com/crescentrose/UMC"
 };
 
 ////----CONVARS-----/////

@@ -25,19 +25,10 @@ public Plugin:myinfo =
 //************************************************************************************************//
 
 // Convars
-Handle cvar_runoff_display      = INVALID_HANDLE;
-Handle cvar_runoff_selective    = INVALID_HANDLE;
-Handle cvar_vote_tieramount     = INVALID_HANDLE;
-Handle cvar_vote_tierdisplay    = INVALID_HANDLE;
-Handle cvar_logging             = INVALID_HANDLE;
-Handle cvar_extend_display      = INVALID_HANDLE;
-Handle cvar_dontchange_display  = INVALID_HANDLE;
-Handle cvar_count_sound         = INVALID_HANDLE;
-Handle cvar_default_vm          = INVALID_HANDLE;
-Handle cvar_block_slots         = INVALID_HANDLE;
-Handle cvar_novote              = INVALID_HANDLE;
-Handle cvar_nommsg_disp         = INVALID_HANDLE;
-Handle cvar_mapnom_display      = INVALID_HANDLE;
+ConVar cvar_runoff_display, cvar_runoff_selective, cvar_vote_tieramount,
+    cvar_vote_tierdisplay, cvar_logging, cvar_extend_display,
+    cvar_dontchange_display, cvar_count_sound, cvar_default_vm, cvar_block_slots,
+    cvar_novote, cvar_nommsg_disp, cvar_mapnom_display, cvar_group_limit; 
 
 // Stores the current category.
 char current_cat[MAP_LENGTH];
@@ -86,6 +77,9 @@ Handle maplistdisplay_forward = INVALID_HANDLE;
 
 /* Template System */
 Handle template_forward = INVALID_HANDLE;
+
+/* Allowed groups */
+ArrayList allowed_groups;
 
 // Flags
 bool change_map_round; // Change map when the round ends?
@@ -209,6 +203,12 @@ public OnPluginStart()
         "Determines where the Tiered Vote Message is displayed on the screen.\n C - Center Message\n S - Chat Message\n T - Top Message\n H - Hint Message"
     ); // TODO: drop feature
 
+    cvar_group_limit = CreateConVar(
+        "sm_umc_group_limit",
+        "",
+        "If set, limits the rotation to one or multiple groups. Separate group names with commas (e.g. 'default,ctf'). Maximum of 8 groups."
+    );
+
     // Create the config if it doesn't exist, and then execute it.
     AutoExecConfig(true, "ultimate-mapchooser");
 
@@ -250,6 +250,13 @@ public OnPluginStart()
 
     vote_managers = new StringMap();
     vote_manager_ids = new ArrayList(ByteCountToCells(64));
+
+    // Set up group limits, if set
+    allowed_groups = new ArrayList(PLATFORM_MAX_PATH);
+    cvar_group_limit.AddChangeHook(ParseGroupLimits);
+    char cvar_group_limit_value[PLATFORM_MAX_PATH];
+    cvar_group_limit.GetString(cvar_group_limit_value, sizeof(cvar_group_limit_value));
+    ParseGroupLimits(cvar_group_limit, "", cvar_group_limit_value);
 
     UMC_RegisterVoteManager("core", VM_MapVote, VM_GroupVote, VM_CancelVote, VM_IsVoteInProgress);
 }
@@ -639,36 +646,33 @@ public Native_UMCVoteManagerComplete(Handle:plugin, numParams)
 //native Handle:UMC_CreateValidMapArray(Handle:kv, const String:group[], bool:isNom, bool:forMapChange);
 public Native_UMCCreateMapArray(Handle plugin, numParams)
 {
-    new Handle:kv = CreateKeyValues("umc_rotation");
-    new Handle:arg = Handle:GetNativeCell(1);
+    KeyValues kv = CreateKeyValues("umc_rotation");
+    Handle arg = Handle:GetNativeCell(1);
     KvCopySubkeys(arg, kv);
 
-    new Handle:mapcycle = Handle:GetNativeCell(2);
+    Handle mapcycle = Handle:GetNativeCell(2);
 
-    new len;
+    int len;
     GetNativeStringLength(3, len);
     new String:group[len+1];
     if (len > 0)
-    {
         GetNativeString(3, group, len+1);
-    }
-    new bool:isNom = bool:GetNativeCell(4);
-    new bool:forMapChange = bool:GetNativeCell(5);
 
-    new Handle:result = CreateMapArray(kv, mapcycle, group, isNom, forMapChange);
+    bool isNom = bool:GetNativeCell(4);
+    bool forMapChange = bool:GetNativeCell(5);
+
+    Handle result = CreateMapArray(kv, mapcycle, group, isNom, forMapChange);
 
     CloseHandle(kv);
 
     if (result == INVALID_HANDLE)
-    {
         ThrowNativeError(SP_ERROR_PARAM, "Could not generate valid map array from provided mapcycle.");
-    }
 
     //Clone all of the handles in the array to prevent memory leaks.
-    new Handle:cloned = CreateArray();
+    Handle cloned = CreateArray();
 
-    new size = GetArraySize(result);
-    new Handle:map;
+    int size = GetArraySize(result);
+    Handle map;
     for (new i = 0; i < size; i++)
     {
         map = GetArrayCell(result, i);
@@ -680,28 +684,22 @@ public Native_UMCCreateMapArray(Handle plugin, numParams)
     return _:CloseAndClone(cloned, plugin);
 }
 
-//Create an array of valid maps from the given mapcycle and group.
-Handle:CreateMapArray(Handle:kv, Handle:mapcycle, const String:group[], bool:isNom, bool:forMapChange)
-{
-    if (kv == INVALID_HANDLE)
-    {
+// Create an array of valid maps from the given mapcycle and group.
+Handle:CreateMapArray(Handle kv, Handle mapcycle, const char[] group, bool isNom, bool forMapChange) {
+    if (kv == INVALID_HANDLE) {
         LogError("NATIVE: Cannot build map array, mapcycle is invalid.");
         return INVALID_HANDLE;
     }
 
-    new bool:oneSection = false;
-    if (StrEqual(group, INVALID_GROUP))
-    {
-        if (!KvGotoFirstSubKey(kv))
-        {
+    bool oneSection = false;
+    if (StrEqual(group, INVALID_GROUP)) {
+        if (!KvGotoFirstSubKey(kv)) {
             LogError("NATIVE: Cannot build map array, mapcycle has no groups.");
             return INVALID_HANDLE;
         }
     }
-    else
-    {
-        if (!KvJumpToKey(kv, group))
-        {
+    else {
+        if (!KvJumpToKey(kv, group)) {
             LogError("NATIVE: Cannot build map array, mapcycle has no group '%s'", group);
             return INVALID_HANDLE;
         }
@@ -709,28 +707,22 @@ Handle:CreateMapArray(Handle:kv, Handle:mapcycle, const String:group[], bool:isN
         oneSection = true;
     }
 
-    new Handle:result = CreateArray();
+    ArrayList result = CreateArray();
     decl String:mapName[MAP_LENGTH], String:groupName[MAP_LENGTH];
-    do
-    {
+    do {
         KvGetSectionName(kv, groupName, sizeof(groupName));
 
-        if (!KvGotoFirstSubKey(kv))
-        {
-            if (!oneSection)
-            {
+        if (!KvGotoFirstSubKey(kv)) {
+            if (!oneSection) {
                 continue;
             }
-            else
-            {
+            else {
                 break;
             }
         }
 
-        do
-        {
-            if (IsValidMap(kv, mapcycle, groupName, isNom, forMapChange))
-            {
+        do {
+            if (IsValidMap(kv, mapcycle, groupName, isNom, forMapChange)) {
                 KvGetSectionName(kv, mapName, sizeof(mapName));
                 PushArrayCell(result, CreateMapTrie(mapName, groupName));
             }
@@ -740,14 +732,10 @@ Handle:CreateMapArray(Handle:kv, Handle:mapcycle, const String:group[], bool:isN
         KvGoBack(kv);
 
         if (oneSection)
-        {
             break;
-        }
-    }
-    while (KvGotoNextKey(kv));
+    } while (KvGotoNextKey(kv));
 
     KvGoBack(kv);
-
     return result;
 }
 
@@ -3785,7 +3773,7 @@ bool:IsValidMapFromCat(Handle:kv, Handle:mapcycle, const String:map[], bool:isNo
 
 //Determines if the server has the required number of players for the given map.
 //    kv:       a mapcycle whose traversal stack is currently at the level of the map.
-bool:IsValidMap(Handle:kv, Handle:mapcycle, const String:groupName[], bool:isNom=false, bool:forMapChange=true)
+bool IsValidMap(Handle kv, Handle mapcycle, const char[] groupName, bool isNom=false, bool forMapChange=true)
 {
     decl String:mapName[MAP_LENGTH];
     KvGetSectionName(kv, mapName, sizeof(mapName));
@@ -3795,6 +3783,11 @@ bool:IsValidMap(Handle:kv, Handle:mapcycle, const String:groupName[], bool:isNom
         LogUMCMessage("WARNING: Map \"%s\" does not exist on the server. (Group: \"%s\")", mapName, groupName);
         return false;
     }
+
+    char group[PLATFORM_MAX_PATH];
+    strcopy(group, sizeof(group), groupName);
+    if (ShouldSkipGroup(group))
+        return false;
 
     new Action:result;
 
@@ -4017,9 +4010,7 @@ FilterMapGroup(Handle:kv, Handle:mapcycle, bool:isNom=false, bool:forMapChange=t
     KvGetSectionName(kv, group, sizeof(group));
 
     if (!KvGotoFirstSubKey(kv))
-    {
         return;
-    }
 
     decl String:mapName[MAP_LENGTH];
     for ( ; ; )
@@ -4322,6 +4313,27 @@ bool:GetRandomCat(Handle:kv, String:buffer[], size)
 
     //Booyah!
     return result;
+}
+
+public void ParseGroupLimits(ConVar cvar, char[] oldValue, char[] newValue) {
+    allowed_groups.Clear();
+
+    if (strlen(newValue) == 0)
+        return;
+
+    char parsed_groups[8][PLATFORM_MAX_PATH];
+    ExplodeString(newValue, ",", parsed_groups, sizeof(parsed_groups), sizeof(parsed_groups[]));
+    for (int i = 0; i < sizeof(parsed_groups); i++) {
+        if (strlen(parsed_groups[i]) > 0)
+            allowed_groups.PushString(parsed_groups[i]);
+    }
+}
+
+bool ShouldSkipGroup(char[] group) {
+    if (allowed_groups.Length == 0)
+        return false;
+    
+    return allowed_groups.FindString(group) == -1;
 }
 
 // vim: set ft=sourcepawn:

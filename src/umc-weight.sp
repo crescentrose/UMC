@@ -25,10 +25,10 @@ along with this plugin.  If not, see <http://www.gnu.org/licenses/>.
 public Plugin:myinfo =
 {
     name = "[UMC] Map Weight",
-    author = "Previous:Steell,Powerlord - Current: Mr.Silence",
     description = "Allows users to specify weights for maps and groups, making them more or less likely to be picked randomly.",
+    author = "Steell, Powerlord, Mr.Silence, VIORA",
     version = PL_VERSION,
-    url = "http://forums.alliedmods.net/showthread.php?t=134190"
+    url = "https://github.com/crescentrose/UMC"
 }
 
 #define WEIGHT_KEY_MAP   "weight"

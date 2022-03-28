@@ -17,36 +17,26 @@ public Plugin myinfo =
     url         = "https://github.com/crescentrose/UMC"
 };
 
-////----CONVARS-----/////
-new Handle:cvar_filename        = INVALID_HANDLE;
-new Handle:cvar_nominate        = INVALID_HANDLE;
-new Handle:cvar_nominate_tiered = INVALID_HANDLE;
-new Handle:cvar_mem_map         = INVALID_HANDLE;
-new Handle:cvar_mem_group       = INVALID_HANDLE;
-new Handle:cvar_sort            = INVALID_HANDLE;
-new Handle:cvar_flags           = INVALID_HANDLE;
-new Handle:cvar_nominate_time   = INVALID_HANDLE;
-////----/CONVARS-----/////
+ConVar cvar_filename, cvar_nominate, cvar_nominate_tiered, cvar_mem_map,
+    cvar_mem_group, cvar_sort, cvar_flags, cvar_nominate_time, cvar_group_limit;
 
-//Mapcycle
+// Mapcycle
 KeyValues map_kv = null;
-new Handle:umc_mapcycle = INVALID_HANDLE;
+Handle umc_mapcycle = INVALID_HANDLE;
+ArrayList allowed_groups;
 
 //Memory queues. Used to store the previously played maps.
-new Handle:vote_mem_arr    = INVALID_HANDLE;
-new Handle:vote_catmem_arr = INVALID_HANDLE;
+Handle vote_mem_arr    = INVALID_HANDLE;
+Handle vote_catmem_arr = INVALID_HANDLE;
 
-new Handle:nom_menu_groups[MAXPLAYERS+1]    = { INVALID_HANDLE, ... };
-new Handle:nom_menu_nomgroups[MAXPLAYERS+1] = { INVALID_HANDLE, ... };
-//EACH INDEX OF THE ABOVE TWO ARRAYS CORRESPONDS TO A NOMINATION MENU FOR A PARTICULAR CLIENT.
+Handle nom_menu_groups[MAXPLAYERS+1]    = { INVALID_HANDLE, ... };
+Handle nom_menu_nomgroups[MAXPLAYERS+1] = { INVALID_HANDLE, ... };
+// each index of the above two arrays corresponds to a nomination menu for a particular client.
 
-//Has a vote neem completed?
-new bool:vote_completed;
+bool vote_completed;
+bool can_nominate;
 
-//Can we nominate?
-new bool:can_nominate;
-
-//TODO: Add cvar for enable/disable exclusion from prev. maps.
+// TODO: Add cvar for enable/disable exclusion from prev. maps.
 //      Possible bug: nomination menu doesn't want to display twice for a client in a map.
 //      Alphabetize based off of display, not actual map name.
 //
@@ -111,24 +101,36 @@ public OnPluginStart()
         "Specifies how long the nomination menu should remain open for. Minimum is 10 seconds!",
         0, true, 10.0
     );
+
+    cvar_group_limit = CreateConVar(
+        "sm_umc_nominate_group_limit",
+        "",
+        "If set, limits the nomination to one or multiple groups. Separate group names with commas (e.g. 'default,ctf'). Maximum of 8 groups."
+    );
     
-    //Create the config if it doesn't exist, and then execute it.
+    // Create the config if it doesn't exist, and then execute it.
     AutoExecConfig(true, "umc-nominate");
     
-    //Reg the nominate console cmd
+    // Reg the nominate console cmd
     RegConsoleCmd("sm_nominate", Command_Nominate);
     
-    //Make listeners for player chat. Needed to recognize chat commands ("rtv", etc.)
+    // Make listeners for player chat. Needed to recognize chat commands ("rtv", etc.)
     AddCommandListener(OnPlayerChat, "say");
-    AddCommandListener(OnPlayerChat, "say2"); //Insurgency Only
     AddCommandListener(OnPlayerChat, "say_team");
     
-    //Initialize our memory arrays
+    // Initialize our memory arrays
     new numCells = ByteCountToCells(MAP_LENGTH);
-    vote_mem_arr    = CreateArray(numCells);
+    vote_mem_arr = CreateArray(numCells);
     vote_catmem_arr = CreateArray(numCells);
     
-    //Load the translations file
+    // Set up group limits, if set
+    allowed_groups = new ArrayList(PLATFORM_MAX_PATH);
+    cvar_group_limit.AddChangeHook(ParseGroupLimits);
+    char cvar_group_limit_value[PLATFORM_MAX_PATH];
+    cvar_group_limit.GetString(cvar_group_limit_value, sizeof(cvar_group_limit_value));
+    ParseGroupLimits(cvar_group_limit, "", cvar_group_limit_value);
+
+    // Load the translations file
     LoadTranslations("ultimate-mapchooser.phrases");
 }
 
@@ -136,16 +138,12 @@ public OnPluginStart()
 //                                           GAME EVENTS                                          //
 //************************************************************************************************//
 //Called after all config files were executed.
-public OnConfigsExecuted()
-{
-    //DEBUG_MESSAGE("Executing Nominate OnConfigsExecuted")
-    
+public OnConfigsExecuted() {
     can_nominate = ReloadMapcycle();
     vote_completed = false;
     
     new Handle:groupArray = INVALID_HANDLE;
-    for (new i = 0; i < sizeof(nom_menu_groups); i++)
-    {
+    for (new i = 0; i < sizeof(nom_menu_groups); i++) {
         groupArray = nom_menu_groups[i];
         if (groupArray != INVALID_HANDLE)
         {
@@ -153,8 +151,7 @@ public OnConfigsExecuted()
             nom_menu_groups[i] = INVALID_HANDLE;
         }
     }
-    for (new i = 0; i < sizeof(nom_menu_nomgroups); i++)
-    {
+    for (new i = 0; i < sizeof(nom_menu_nomgroups); i++) {
         groupArray = nom_menu_groups[i];
         if (groupArray != INVALID_HANDLE)
         {
@@ -171,9 +168,7 @@ public OnConfigsExecuted()
     UMC_GetCurrentMapGroup(groupName, sizeof(groupName));
     
     if (can_nominate && StrEqual(groupName, INVALID_GROUP, false))
-    {
         KvFindGroupOfMap(umc_mapcycle, mapName, groupName, sizeof(groupName));
-    }
     
     //Add the map to all the memory queues.
     new mapmem = GetConVarInt(cvar_mem_map);
@@ -182,9 +177,7 @@ public OnConfigsExecuted()
     AddToMemoryArray(groupName, vote_catmem_arr, (mapmem > catmem) ? mapmem : catmem);
     
     if (can_nominate)
-    {
         RemovePreviousMapsFromCycle();
-    }
 }
 
 //Called when a player types in chat.
@@ -262,7 +255,7 @@ DoNominateMap(int client, char[] mapName)
     char groupName[MAP_LENGTH], nomGroup[MAP_LENGTH];
 
     // Find the group and the name of the map from the map rotation.
-    if (!KvFindGroupOfMap(map_kv, mapName, groupName, sizeof(groupName))) {
+    if (!KvFindGroupOfMap(map_kv, mapName, groupName, sizeof(groupName)) || ShouldSkipGroup(groupName)) {
         PrintToChat(client, "Map \"%s\" is currently unavailable.", mapName);
         return; 
     }
@@ -290,13 +283,10 @@ DoNominateMap(int client, char[] mapName)
     new clientFlags = GetUserFlagBits(client);
     
     // Check if admin flag set
-    if (adminFlags[0] != '\0' && !(clientFlags & ReadFlagString(adminFlags)))
-    {
-        // TODO: Change to translation phrase
+    if (adminFlags[0] != '\0' && !(clientFlags & ReadFlagString(adminFlags))) {
         PrintToChat(client, "[UMC] Could not find map \"%s\"", mapName);
     }
-    else
-    {
+    else {
         // Nominate it.
         UMC_NominateMap(map_kv, mapName, groupName, client, nomGroup);
     
@@ -453,17 +443,17 @@ Handle BuildNominationMenu(int client, const char[] cat = INVALID_GROUP)
         // Check if admin flag is set and if player has admin flag
         if (mAdminFlags[0] != '\0' && !(clientFlags & ReadFlagString(mAdminFlags)))
             continue;
-        
-        // Get the name of the current map.
-        KvGetSectionName(map_kv, mapBuff, sizeof(mapBuff));
-        
+
+        // Skip the map if it belongs to a group we do not wish to see in the nominations list
+        if (ShouldSkipGroup(groupBuff))
+            continue;
+
         // Get the display string.
         UMC_FormatDisplayString(display, sizeof(display), dispKV, mapBuff, groupBuff);
         
         // we want to also have nominated maps in the menu, but disabled.
         // otherwise people cry because they think we removed badwater
-        if (UMC_IsMapNominated(mapBuff, group))
-        {
+        if (UMC_IsMapNominated(mapBuff, group)) {
             FormatEx(display, sizeof(display), "%s (Nominated)", display);
             style = Style_Disabled;
         }
@@ -471,7 +461,7 @@ Handle BuildNominationMenu(int client, const char[] cat = INVALID_GROUP)
         // TODO: what do these get used for?
         PushArrayString(nom_menu_groups[client], groupBuff);
         PushArrayString(nom_menu_nomgroups[client], group);
-  
+
         // Add map data to the arrays.
         menuList.AddItemList(mapBuff, display, style);
 
@@ -715,4 +705,25 @@ public UMC_DisplayMapCycle(client, bool:filtered)
     {
         PrintKvToConsole(umc_mapcycle, client);
     }
+}
+
+public void ParseGroupLimits(ConVar cvar, char[] oldValue, char[] newValue) {
+    allowed_groups.Clear();
+
+    if (strlen(newValue) == 0)
+        return;
+
+    char parsed_groups[8][PLATFORM_MAX_PATH];
+    ExplodeString(newValue, ",", parsed_groups, sizeof(parsed_groups), sizeof(parsed_groups[]));
+    for (int i = 0; i < sizeof(parsed_groups); i++) {
+        if (strlen(parsed_groups[i]) > 0)
+            allowed_groups.PushString(parsed_groups[i]);
+    }
+}
+
+bool ShouldSkipGroup(char[] group) {
+    if (allowed_groups.Length == 0)
+        return false;
+    
+    return allowed_groups.FindString(group) == -1;
 }

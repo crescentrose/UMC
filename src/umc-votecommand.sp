@@ -26,11 +26,11 @@ along with this plugin.  If not, see <http://www.gnu.org/licenses/>.
 //Plugin Information
 public Plugin:myinfo =
 {
-    name        = "[UMC] Vote Command",
-    author      = "Previous:Steell,Powerlord - Current: Mr.Silence",
+    name = "[UMC] Vote Command",
+    author = "Steell, Powerlord, Mr.Silence, VIORA",
     description = "Extends Ultimate Mapchooser to allow admins to spawn votes.",
-    version     = PL_VERSION,
-    url         = "http://forums.alliedmods.net/showthread.php?t=134190"
+    version = PL_VERSION,
+    url = "https://github.com/crescentrose/UMC"
 };
 
 ////----CONVARS-----/////
