@@ -10,8 +10,9 @@
 #undef REQUIRE_PLUGIN
 #include <mapchooser>
 
-//Plugin Information
-public Plugin:myinfo =
+#pragma newdecls required
+
+public Plugin myinfo =
 {
     name        = "[UMC] End of Map Vote",
     author      = "Steell, Powerlord, Mr.Silence, VIORA",
@@ -20,95 +21,55 @@ public Plugin:myinfo =
     url         = "https://github.com/crescentrose/umc"
 };
 
-////----CONVARS-----/////
-new Handle:cvar_filename                = INVALID_HANDLE;
-new Handle:cvar_scramble                = INVALID_HANDLE;
-new Handle:cvar_vote_time               = INVALID_HANDLE;
-new Handle:cvar_strict_noms             = INVALID_HANDLE;
-new Handle:cvar_runoff                  = INVALID_HANDLE;
-new Handle:cvar_runoff_sound            = INVALID_HANDLE;
-new Handle:cvar_runoff_max              = INVALID_HANDLE;
-new Handle:cvar_vote_allowduplicates    = INVALID_HANDLE;
-new Handle:cvar_vote_threshold          = INVALID_HANDLE;
-new Handle:cvar_fail_action             = INVALID_HANDLE;
-new Handle:cvar_runoff_fail_action      = INVALID_HANDLE;
-new Handle:cvar_endvote                 = INVALID_HANDLE;
-new Handle:cvar_extend_rounds           = INVALID_HANDLE;
-new Handle:cvar_extend_frags            = INVALID_HANDLE;
-new Handle:cvar_extend_time             = INVALID_HANDLE;
-new Handle:cvar_extensions              = INVALID_HANDLE;
-new Handle:cvar_start_frags             = INVALID_HANDLE;
-new Handle:cvar_start_time              = INVALID_HANDLE;
-new Handle:cvar_start_rounds            = INVALID_HANDLE;
-new Handle:cvar_vote_mem                = INVALID_HANDLE;
-new Handle:cvar_vote_type               = INVALID_HANDLE;
-new Handle:cvar_vote_startsound         = INVALID_HANDLE;
-new Handle:cvar_vote_endsound           = INVALID_HANDLE;
-new Handle:cvar_vote_catmem             = INVALID_HANDLE;
-new Handle:cvar_vote_roundend           = INVALID_HANDLE;
-new Handle:cvar_flags                   = INVALID_HANDLE;
-new Handle:cvar_delay                   = INVALID_HANDLE;
-new Handle:cvar_changetime              = INVALID_HANDLE;
+ConVar cvar_filename, cvar_scramble, cvar_vote_time, cvar_strict_noms,
+    cvar_runoff, cvar_runoff_sound, cvar_runoff_max, cvar_vote_allowduplicates,
+    cvar_vote_threshold, cvar_fail_action, cvar_runoff_fail_action, cvar_endvote,
+    cvar_extend_rounds, cvar_extend_frags, cvar_extend_time, cvar_extensions,
+    cvar_start_frags, cvar_start_time, cvar_start_rounds, cvar_vote_mem,
+    cvar_vote_type, cvar_vote_startsound, cvar_vote_endsound, cvar_vote_catmem,
+    cvar_vote_roundend, cvar_flags, cvar_delay, cvar_changetime, cvar_maxrounds,
+    cvar_fraglimit, cvar_winlimit;
 
-////----/CONVARS-----/////
-//Mapcycle KV
-new Handle:map_kv = INVALID_HANDLE;
-new Handle:umc_mapcycle = INVALID_HANDLE;
+KeyValues map_kv, umc_mapcycle;
 
-//Memory queues. Used to store the previously played maps.
-new Handle:vote_mem_arr    = INVALID_HANDLE;
-new Handle:vote_catmem_arr = INVALID_HANDLE;
+// Memory queues. Used to store the previously played maps.
+ArrayList vote_mem_arr, vote_catmem_arr;
 
-//Timers
-new Handle:vote_timer = INVALID_HANDLE; //Timer which handles end-of-map vote based off of time remaining.
-//Limit Cvars
-new Handle:cvar_maxrounds = INVALID_HANDLE; //Round limit cvar
-new Handle:cvar_fraglimit = INVALID_HANDLE; //Frag limit cvar
-new Handle:cvar_winlimit  = INVALID_HANDLE; //Win limit cvar
+Handle vote_timer; // Timer which handles end-of-map vote based off of time remaining.
 
-//Flags
-new bool:timer_alive;      //Is the time-based vote timer ticking?
-new bool:vote_enabled;     //Are we able to run a vote? Means that the timer is running.
-new bool:vote_roundend;    //Are we going to start a vote when this round is over?
-new bool:vote_completed;   //Has an end of map vote been completed?
-new bool:vote_failed;      //Did the vote fail due to no players?
+// Flags
+bool timer_alive;      // Is the time-based vote timer ticking?
+bool vote_enabled;     // Are we able to run a vote? Means that the timer is running.
+bool vote_roundend;    // Are we going to start a vote when this round is over?
+bool vote_completed;   // Has an end of map vote been completed?
+bool vote_failed;      // Did the vote fail due to no players?
 
 //Keeps track of the time before the end-of-map vote starts.
-new Float:vote_delaystart;
+float vote_delaystart;
 
 //Counts the rounds.
-new round_counter = 0;
+int round_counter = 0;
 
 //Counts how many times each team has won.
 #define MAXTEAMS 10
-new team_wincounts[MAXTEAMS];
+int team_wincounts[MAXTEAMS];
 
 //Counts the number of available extensions.
-new extend_counter;
+int extend_counter;
 
 // Name of current map
-new String:current_map_name[MAP_LENGTH];
+char current_map_name[MAP_LENGTH];
 
 //Sounds to be played at the start and end of votes.
-new String:vote_start_sound[PLATFORM_MAX_PATH], String:vote_end_sound[PLATFORM_MAX_PATH],
-    String:runoff_sound[PLATFORM_MAX_PATH];
+char vote_start_sound[PLATFORM_MAX_PATH], vote_end_sound[PLATFORM_MAX_PATH],
+    runoff_sound[PLATFORM_MAX_PATH];
      
 /* Forwards */
-new Handle:time_update_forward  = INVALID_HANDLE;
-new Handle:round_update_forward = INVALID_HANDLE;
-new Handle:win_update_forward   = INVALID_HANDLE;
-new Handle:frag_update_forward  = INVALID_HANDLE;
-new Handle:time_tick_forward    = INVALID_HANDLE;
-new Handle:round_tick_forward   = INVALID_HANDLE;
-new Handle:win_tick_forward     = INVALID_HANDLE;
-new Handle:frag_tick_forward    = INVALID_HANDLE;
+Handle time_update_forward, round_update_forward, win_update_forward,
+    frag_update_forward, time_tick_forward, round_tick_forward, win_tick_forward,
+    frag_tick_forward;
 
-//************************************************************************************************//
-//                                        SOURCEMOD EVENTS                                        //
-//************************************************************************************************//
-//Called before the plugin loads, sets up our natives.
-public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max)
-{
+public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max) {
     RegPluginLibrary("mapchooser");
 
     CreateNative("HasEndOfMapVoteFinished", Native_CheckVoteDone);
@@ -119,9 +80,8 @@ public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max)
     return APLRes_Success;
 }
 
-//Called when the plugin is finished loading.
-public OnPluginStart()
-{
+// Called when the plugin is finished loading.
+public void OnPluginStart() {
     cvar_changetime = CreateConVar(
         "sm_umc_endvote_changetime",
         "2",
@@ -313,16 +273,15 @@ public OnPluginStart()
         0, true, 0.0, true, 1.0
     );
 
-    //Create the config if it doesn't exist, and then execute it.
+    // Create the config if it doesn't exist, and then execute it.
     AutoExecConfig(true, "umc-endvote");
 
-    //Set up our "timers" for the end-of-map vote.
+    // Set up our "timers" for the end-of-map vote.
     cvar_maxrounds = FindConVar("mp_maxrounds");
     cvar_fraglimit = FindConVar("mp_fraglimit");
     cvar_winlimit  = FindConVar("mp_winlimit");
     
-    if (cvar_maxrounds != INVALID_HANDLE || cvar_winlimit != INVALID_HANDLE)
-    {
+    if (cvar_maxrounds != INVALID_HANDLE || cvar_winlimit != INVALID_HANDLE) {
         HookEvent("round_end",                Event_RoundEnd); //Generic
         HookEventEx("teamplay_round_stalemate", Event_RoundEndTF2); // TF2
         HookEventEx("teamplay_win_panel",     Event_RoundEndTF2); //TF2
@@ -330,23 +289,21 @@ public OnPluginStart()
         HookEventEx("teamplay_restart_round", Event_RestartRound); //TF2  
     }
     
-    //Hook score.
+    // Hook score.
     if (cvar_fraglimit != INVALID_HANDLE)
-    {
         HookEvent("player_death", Event_PlayerDeath);
-    }
     
     //Hook all necessary cvar changes
     HookConVarChange(cvar_vote_mem,   Handle_VoteMemoryChange);
     HookConVarChange(cvar_endvote,    Handle_VoteChange);
     HookConVarChange(cvar_start_time, Handle_TriggerChange);
     
-    //Initialize our memory arrays
-    new numCells = ByteCountToCells(MAP_LENGTH);
-    vote_mem_arr    = CreateArray(numCells);
-    vote_catmem_arr = CreateArray(numCells);
+    // Initialize our memory arrays
+    int numCells = ByteCountToCells(MAP_LENGTH);
+    vote_mem_arr = new ArrayList(numCells);
+    vote_catmem_arr = new ArrayList(numCells);
     
-    //Load the translations file
+    // Load the translations file
     LoadTranslations("ultimate-mapchooser.phrases");
 
     // Forwards
@@ -360,12 +317,7 @@ public OnPluginStart()
     frag_tick_forward    = CreateGlobalForward("UMC_EndVote_OnFragTimerTicked", ET_Ignore, Param_Cell, Param_Cell);
 }
 
-//************************************************************************************************//
-//                                           GAME EVENTS                                          //
-//************************************************************************************************//
-//Called after all config files were executed.
-public OnConfigsExecuted()
-{
+public void OnConfigsExecuted() {
     //Votes are not enabled.
     vote_enabled = false;
     vote_roundend = false;
@@ -382,68 +334,53 @@ public OnConfigsExecuted()
     round_counter = 0;
     
     //Reset the stored team scores.
-    for (new i = 0; i < MAXTEAMS; i++)
-    {
+    for (int i = 0; i < MAXTEAMS; i++)
         team_wincounts[i] = 0;
-    }
      
-    new bool:mapcycleLoaded = ReloadMapcycle();
+    bool mapcycleLoaded = ReloadMapcycle();
     
     // Make end-of-map vote timers if the mapcycle was loaded successfully AND
     // the end-of-map vote cvar is enabled AND the timer is not currently alive.
     if (mapcycleLoaded && GetConVarBool(cvar_endvote) && !timer_alive)
-    {
         MakeVoteTimer();
-    }
     
     // Grab the name of the current map.
     GetCurrentMap(current_map_name, sizeof(current_map_name));
     LogUMCMessage("DEBUG: Current map name is %s", current_map_name);
     
-    decl String:groupName[MAP_LENGTH];
+    char groupName[MAP_LENGTH];
     UMC_GetCurrentMapGroup(groupName, sizeof(groupName));
     
     if (mapcycleLoaded && StrEqual(groupName, INVALID_GROUP, false))
-    {
         KvFindGroupOfMap(umc_mapcycle, current_map_name, groupName, sizeof(groupName));
-    }
     
-    //Add the map to all the memory queues.
-    new mapmem = GetConVarInt(cvar_vote_mem);
-    new catmem = GetConVarInt(cvar_vote_catmem);
+    // Add the map to all the memory queues.
+    int mapmem = GetConVarInt(cvar_vote_mem);
+    int catmem = GetConVarInt(cvar_vote_catmem);
     AddToMemoryArray(current_map_name, vote_mem_arr, mapmem);
     AddToMemoryArray(groupName, vote_catmem_arr, (mapmem > catmem) ? mapmem : catmem);
     
     if (mapcycleLoaded)
-    {
         RemovePreviousMapsFromCycle();
-    }
 }
 
-public OnMapStart()
-{
-    //Setup vote sounds.
+public void OnMapStart() {
     SetupVoteSounds();
 }
 
-//Called when a player dies. Used for end-of-map vote based on frags.
-public Event_PlayerDeath(Handle:evnt, String:name[], bool:dontBroadcast)
-{
-    new fraglimit = GetConVarInt(cvar_fraglimit);
-    if (vote_enabled && fraglimit > 0)
-    {
-        new fragger = GetClientOfUserId(GetEventInt(evnt, "attacker"));
+// Called when a player dies. Used for end-of-map vote based on frags.
+public void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast) {
+    int fraglimit = GetConVarInt(cvar_fraglimit);
+    if (vote_enabled && fraglimit > 0) {
+        int fragger = GetClientOfUserId(GetEventInt(event, "attacker"));
         
         if (!fragger)
-        {
             return;
-        }
          
-        new startfrags = GetConVarInt(cvar_start_frags);
-        new frags = GetClientFrags(fragger) + 1;
+        int startfrags = GetConVarInt(cvar_start_frags);
+        int frags = GetClientFrags(fragger) + 1;
     
-        if (frags >= (fraglimit - startfrags))
-        {
+        if (frags >= (fraglimit - startfrags)) {
             LogUMCMessage("Frag limit triggered end of map vote.");
             DestroyTimers();
             SetupMapVote();
@@ -457,18 +394,14 @@ public Event_PlayerDeath(Handle:evnt, String:name[], bool:dontBroadcast)
     }
 }
 
-//Called if the the amount of map time left is changed at any point.
-//Needed to update our vote timer.
-public OnMapTimeLeftChanged()
-{
-    //Update the end-of-map vote timer if we haven't already completed an RTV.
+// Called if the the amount of map time left is changed at any point.
+// Needed to update our vote timer.
+public void OnMapTimeLeftChanged() {
+    // Update the end-of-map vote timer if we haven't already completed an RTV.
     if (vote_enabled)
-    {
         UpdateTimers();
-    }
 
-    if (vote_failed)
-    {
+    if (vote_failed) {
         UpdateTimers();
         UpdateOtherTimers();
         vote_completed = false;
@@ -478,62 +411,53 @@ public OnMapTimeLeftChanged()
 }
 
 //Called when a round ends.
-public Event_RoundEnd(Handle:evnt, const String:name[], bool:dontBroadcast)
+public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
-    if (vote_roundend)
-    {
+    if (vote_roundend) {
         vote_roundend = false;
         StartMapVoteRoundEnd();
     }
     
-    new winner = GetEventInt(evnt, "winner");
+    int winner = GetEventInt(event, "winner");
     
     //Do nothing if there wasn't a winning team.
     if (winner == 0 || winner == 1)
-    {
         return;
-    }
+
     if (winner >= MAXTEAMS)
-    {
         SetFailState("Mod exceeded maximum team count - please file a bug report.");
-    }
     
-    //Update the round "timer"
+    // Update the round "timer"
     round_counter++;
     team_wincounts[winner]++;
     
-    if (vote_enabled) 
-    {
+    if (vote_enabled) {
         CheckWinLimit(team_wincounts[winner], winner);
         CheckMaxRounds();
     }
 }
 
 //Called when a round ends in tf2.
-public Event_RoundEndTF2(Handle:evnt, const String:name[], bool:dontBroadcast)
-{
+public void Event_RoundEndTF2(Event event, const char[] name, bool dontBroadcast) {
     int timeleft;
     GetMapTimeLeft(timeleft);
 
     // we always want to trigger a vote if there is no more time on the clock
-    if (vote_roundend || timeleft == 0)
-    {
+    if (vote_roundend || timeleft == 0) {
         vote_roundend = false;
         StartMapVoteRoundEnd();
     }
 
-    new bluescore = GetEventInt(evnt, "blue_score");
-    new redscore  = GetEventInt(evnt, "red_score");
+    int bluescore = GetEventInt(event, "blue_score");
+    int redscore  = GetEventInt(event, "red_score");
     
-    if (GetEventInt(evnt, "round_complete") == 1 || StrEqual(name, "arena_win_panel"))
-    {
+    if (GetEventInt(event, "round_complete") == 1 || StrEqual(name, "arena_win_panel")) {
         round_counter++;
         
-        if (vote_enabled)
-        {
+        if (vote_enabled) {
             CheckMaxRounds();
             
-            new winningTeam = GetEventInt(evnt, "winning_team");
+            int winningTeam = GetEventInt(event, "winning_team");
             
             switch (winningTeam)
             {
@@ -548,26 +472,20 @@ public Event_RoundEndTF2(Handle:evnt, const String:name[], bool:dontBroadcast)
     }
 }
 
-//Called when the map is restarted.
-public Event_RestartRound(Handle:evnt, const String:name[], bool:dontBroadcast)
-{
+public void Event_RestartRound(Event evnt, const char[] name, bool dontBroadcast) {
     round_counter = 0;
     
-    if (cvar_maxrounds != INVALID_HANDLE)
-    {
+    if (cvar_maxrounds != INVALID_HANDLE) {
         //Update our vote warnings.
         Call_StartForward(round_update_forward);
         Call_PushCell(GetConVarInt(cvar_maxrounds) - GetConVarInt(cvar_start_rounds));
         Call_Finish();
     }
     
-    for (new i = 0; i < MAXTEAMS; i++)
-    {
+    for (int i = 0; i < MAXTEAMS; i++)
         team_wincounts[i] = 0;
-    }
         
-    if (cvar_winlimit != INVALID_HANDLE)
-    {
+    if (cvar_winlimit != INVALID_HANDLE) {
         Call_StartForward(win_update_forward);
         Call_PushCell(GetConVarInt(cvar_winlimit) - GetConVarInt(cvar_start_rounds));
         Call_PushCell(0);
@@ -575,120 +493,97 @@ public Event_RestartRound(Handle:evnt, const String:name[], bool:dontBroadcast)
     }
 }
 
-//Called at the end of a map.
-public OnMapEnd()
-{
+public void OnMapEnd() {
     // Vote timer is not running
     timer_alive = false;
-    vote_timer = INVALID_HANDLE;
+    KillTimer(vote_timer);
+    vote_timer = null;
 }
 
-//************************************************************************************************//
-//                                              SETUP                                             //
-//************************************************************************************************//
-//Parses the mapcycle file and returns a KV handle representing the mapcycle.
-Handle:GetMapcycle()
-{
-    //Grab the file name from the cvar.
-    decl String:filename[PLATFORM_MAX_PATH];
+// Parses the mapcycle file and returns a KV handle representing the mapcycle.
+KeyValues GetMapcycle() {
+    char filename[PLATFORM_MAX_PATH];
     GetConVarString(cvar_filename, filename, sizeof(filename));
     
-    //Get the kv handle from the file.
-    new Handle:result = GetKvFromFile(filename, "umc_rotation");
+    Handle result = GetKvFromFile(filename, "umc_rotation");
     
-    //Log an error and return empty handle if the mapcycle file failed to parse.
-    if (result == INVALID_HANDLE)
-    {
+    if (result == null) {
         LogError("SETUP: Mapcycle failed to load!");
-        return INVALID_HANDLE;
+        return null;
     }
     
-    //Success!
-    return result;
+    return view_as<KeyValues>(result);
 }
 
-//Sets up the vote sounds.
-SetupVoteSounds()
-{
-    //Grab sound files from cvars.
+// TODO: remove method
+void SetupVoteSounds() {
+    // Grab sound files from cvars.
     GetConVarString(cvar_vote_startsound, vote_start_sound, sizeof(vote_start_sound));
     GetConVarString(cvar_vote_endsound, vote_end_sound, sizeof(vote_end_sound));
     GetConVarString(cvar_runoff_sound, runoff_sound, sizeof(runoff_sound));
     
-    //Gotta cache 'em all!
+    // Gotta cache 'em all!
     CacheSound(vote_start_sound);
     CacheSound(vote_end_sound);
     CacheSound(runoff_sound);
 }
 
-//Sets up timers for an end-of-map vote.
-MakeVoteTimer()
-{
+// Sets up timers for an end-of-map vote.
+void MakeVoteTimer() {
     //A vote has not been completed if we're making a new timer.
     vote_completed = false;
     
-    //The end-of-map vote is now enabled.
+    // The end-of-map vote is now enabled.
     vote_enabled = true;
     
-    //Make the end-of-map vote timer.
-    if (timer_alive)
-    {
+    // Make the end-of-map vote timer.
+    if (timer_alive) {
         timer_alive = false;
         KillTimer(vote_timer);
-        vote_timer = INVALID_HANDLE;
+        vote_timer = null;
     }
 
     vote_timer = MakeTimer();
     UpdateOtherTimers();
 }
 
-//Updates the non-mp_timelimit "timers."
-UpdateOtherTimers()
-{
-    new start;
+// Updates the non-mp_timelimit "timers."
+void UpdateOtherTimers() {
+    int start;
     
-    if (cvar_maxrounds != INVALID_HANDLE)
-    {
+    if (cvar_maxrounds != INVALID_HANDLE) {
         start = GetConVarInt(cvar_maxrounds) - GetConVarInt(cvar_start_rounds) - round_counter;
         if (start > 0)
-        {
             LogUMCMessage("End of map vote will appear after %i more rounds.", start);
-        }
          
-        //Update our vote warnings.
+        // Update our vote warnings.
         Call_StartForward(round_update_forward);
         Call_PushCell(start);
         Call_Finish();
     }
     
-    if (cvar_winlimit != INVALID_HANDLE)
-    {
-        new winScore;
-        new winTeam = GetWinningTeam(winScore);
+    if (cvar_winlimit != INVALID_HANDLE) {
+        int winScore;
+        int winTeam = GetWinningTeam(winScore);
         start = GetConVarInt(cvar_winlimit) - GetConVarInt(cvar_start_rounds) - winScore;
 
         if (start > 0)
-        {
             LogUMCMessage("End of map vote will appear after %i more wins.", start);
-        }
         
-        //Update our vote warnings.
-        //UpdateVoteWarnings(.round=warnings_round_enabled, .frag=warnings_frag_enabled);
+        // Update our vote warnings.
         Call_StartForward(win_update_forward);
         Call_PushCell(start);
         Call_PushCell(winTeam);
         Call_Finish();
     }
     
-    if (cvar_fraglimit != INVALID_HANDLE)
-    {
-        new fragCount;
-        new topFragger = GetTopFragger(fragCount);
+    if (cvar_fraglimit != INVALID_HANDLE) {
+        int fragCount;
+        int topFragger = GetTopFragger(fragCount);
         start = GetConVarInt(cvar_fraglimit) - GetConVarInt(cvar_start_frags) - fragCount;
+
         if (start > 0)
-        {
             LogUMCMessage("End of map vote will appear after %i more frags.", start);
-        }
         
         //Update our vote warnings.
         Call_StartForward(frag_update_forward);
@@ -698,26 +593,21 @@ UpdateOtherTimers()
     }
 }
 
-//Reloads the mapcycle. Returns true on success, false on failure.
-bool:ReloadMapcycle()
+// Reloads the mapcycle. Returns true on success, false on failure.
+bool ReloadMapcycle()
 {
-    if (umc_mapcycle != INVALID_HANDLE)
-    {
-        CloseHandle(umc_mapcycle);
-        umc_mapcycle = INVALID_HANDLE;
-    }
-    if (map_kv != INVALID_HANDLE)
-    {
-        CloseHandle(map_kv);
-        map_kv = INVALID_HANDLE;
-    }
+    if (umc_mapcycle != null)
+        delete umc_mapcycle;
+
+    if (map_kv != null)
+        delete map_kv;
+
     umc_mapcycle = GetMapcycle();
     
     return umc_mapcycle != INVALID_HANDLE;
 }
 
-RemovePreviousMapsFromCycle()
-{
+void RemovePreviousMapsFromCycle() {
     map_kv = CreateKeyValues("umc_rotation");
     KvCopySubkeys(umc_mapcycle, map_kv);
     FilterMapcycleFromArrays(
@@ -728,55 +618,38 @@ RemovePreviousMapsFromCycle()
     );
 }
 
-//************************************************************************************************//
-//                                          CVAR CHANGES                                          //
-//************************************************************************************************//
 // Called when the cvar for the maximum number of rounds has been changed. Used for end-of-map vote based on rounds.
-public Handle_MaxroundsChange(Handle:convar, const String:oldVal[], const String:newVal[])
-{
-    new start = StringToInt(newVal) - GetConVarInt(cvar_start_rounds) - round_counter;
-    new old = StringToInt(oldVal);
+public void Handle_MaxroundsChange(ConVar convar, const char[] oldVal, char[] newVal) {
+    int start = StringToInt(newVal) - GetConVarInt(cvar_start_rounds) - round_counter;
+    int old = StringToInt(oldVal);
     
-    //Log
-    if (start > 0)
-    {
+    // Log
+    if (start > 0) {
         LogUMCMessage("End of map vote will appear after %i more rounds.", start);
     }
-    else if (old > 0)
-    {
+    else if (old > 0) {
         LogUMCMessage("End of map vote round trigger disabled.");
     }
-    else 
-    {
-        // Does nothing
-    }
     
-    //UpdateVoteWarnings(.round=warnings_round_enabled);
     Call_StartForward(round_update_forward);
     Call_PushCell(start);
     Call_Finish();
 }
 
 //Called when the cvar for the win limit has been changed. Used for end-of-map vote based on rounds.
-public Handle_WinlimitChange(Handle:cvar, const String:oldVal[], const String:newVal[])
-{
-    new winScore;
-    new winningTeam = GetWinningTeam(winScore);
-    new start = StringToInt(newVal) - GetConVarInt(cvar_start_rounds) - winScore;
-    new old = StringToInt(oldVal);
+public void Handle_WinlimitChange(ConVar cvar, const char[] oldVal, const char[] newVal) {
+    int winScore;
+    int winningTeam = GetWinningTeam(winScore);
+    int start = StringToInt(newVal) - GetConVarInt(cvar_start_rounds) - winScore;
+    int old = StringToInt(oldVal);
     
-    //Log
-    if (start > 0)
-    {
+    if (start > 0) {
         LogUMCMessage("End of map vote will appear after %i more wins.", start);
     }
-    else if (old > 0)
-    {    
+    else if (old > 0) {    
         LogUMCMessage("End of map vote round trigger disabled.");
     }
-    else 
-    {
-        // Does nothing
+    else  {
         LogUMCMessage("DEBUG: New limit and old value are not greater than 0 for winlimit... potential problem?");
     }
     
@@ -786,27 +659,23 @@ public Handle_WinlimitChange(Handle:cvar, const String:oldVal[], const String:ne
     Call_Finish();
 }
 
-//Called when the cvar for the maximum number of frags has been changed. Used for end-of-map vote
-//based on frags.
-public Handle_FraglimitChange(Handle:convar, const String:oldVal[], const String:newVal[])
-{
-    new newlimit = StringToInt(newVal);
-    if (newlimit > 0)
-    {
+// Called when the cvar for the maximum number of frags has been changed. Used for end-of-map vote
+// based on frags.
+public void Handle_FraglimitChange(ConVar cvar, const char[] oldVal, const char[] newVal) {
+    int newlimit = StringToInt(newVal);
+
+    if (newlimit > 0) {
         LogUMCMessage("End of map vote will appear after %i frags.", StringToInt(newVal) - GetConVarInt(cvar_start_frags));
     }
-    else if (StringToInt(oldVal) > 0)
-    {
+    else if (StringToInt(oldVal) > 0) {
         LogUMCMessage("End of map vote frag trigger disabled.");
     }
-    else 
-    {
-        // Does nothing
+    else {
         LogUMCMessage("DEBUG: New limit and old value are not greater than 0 for fraglimit... potential problem?");
     }
     
-    new topFrags;
-    new topFragger = GetTopFragger(topFrags);
+    int topFrags;
+    int topFragger = GetTopFragger(topFrags);
     
     Call_StartForward(frag_update_forward);
     Call_PushCell(float(newlimit - GetConVarInt(cvar_start_frags) - topFrags));
@@ -814,64 +683,50 @@ public Handle_FraglimitChange(Handle:convar, const String:oldVal[], const String
     Call_Finish();
 }
 
-//Called when the number of excluded previous maps from end-of-map votes has changed.
-public Handle_VoteMemoryChange(Handle:convar, const String:oldValue[], const String:newValue[])
-{
+// Called when the number of excluded previous maps from end-of-map votes has changed.
+public void Handle_VoteMemoryChange(ConVar cvar, const char[] oldVal, const char[] newVal) {
     // Trim the memory array for end-of-map votes.
     // We pass 1 extra to the argument in order to account for the current map, which should always be excluded.
-    TrimArray(vote_mem_arr, StringToInt(newValue));
+    TrimArray(vote_mem_arr, StringToInt(newVal));
 }
 
-//Called when the cvar which enabled end-of-map votes has changed.
-public Handle_VoteChange(Handle:convar, const String:oldValue[], const String:newValue[])
-{
-    //Regardless of the change, destroy all existing end-of-map vote timers.
+// Called when the cvar which enabled end-of-map votes has changed.
+public void Handle_VoteChange(ConVar cvar, const char[] oldVal, const char[] newVal) {
+    // Regardless of the change, destroy all existing end-of-map vote timers.
     DestroyTimers();
     vote_enabled = false;
     
     //Make new timers if the new value of the cvar is 1.
-    if (StringToInt(newValue) == 1)
-    {
+    if (StringToInt(newVal) == 1)
         MakeVoteTimer();
-    }
 }
 
 //Called when the cvar which specifies the time trigger for the end-of-round vote is changed.
-public Handle_TriggerChange(Handle:convar, const String:oldVal[], const String:newVal[])
-{
-    //Update all necessary timers.
+public void Handle_TriggerChange(ConVar cvar, const char[] oldVal, const char[] newVal) {
     UpdateTimers();
 }
 
-//************************************************************************************************//
-//                                             NATIVES                                            //
-//************************************************************************************************//
 // native HasEndOfMapVoteFinished();
-public Native_CheckVoteDone(Handle:plugin, numParams)
-{
+public int Native_CheckVoteDone(Handle plugin, int numParams) {
     return vote_completed;
 }
 
 // native EndOfMapVoteEnabled();
-public Native_EndOfMapVoteEnabled(Handle:plugin, numParams)
-{
+public int Native_EndOfMapVoteEnabled(Handle plugin, int numParams) {
     return vote_enabled;
 }
 
 //************************************************************************************************//
 //                                         END OF MAP VOTE                                        //
 //************************************************************************************************//
-//Fetches the index of the winning team.
-GetWinningTeam(&score)
-{
-    new wincount;
-    new max = team_wincounts[0];
-    new winning = 0;
-    for (new i = 1; i < MAXTEAMS; i++)
-    {
+// Fetches the index of the winning team.
+int GetWinningTeam(int &score) {
+    int wincount;
+    int max = team_wincounts[0];
+    int winning = 0;
+    for (int i = 1; i < MAXTEAMS; i++) {
         wincount = team_wincounts[i];
-        if (wincount > max)
-        {
+        if (wincount > max) {
             max = wincount;
             winning = i;
         }
@@ -880,22 +735,17 @@ GetWinningTeam(&score)
     return winning;
 }
 
-//Fetches the index of the winning team.
-GetTopFragger(&score)
-{
-    new fragcount;
-    new max = team_wincounts[0];
-    new winning = 0;
-    for (new i = 1; i <= MaxClients; i++)
-    {
+// Fetches the index of the winning team.
+int GetTopFragger(int &score) {
+    int fragcount;
+    int max = team_wincounts[0];
+    int winning = 0;
+    for (int i = 1; i <= MaxClients; i++) {
         if (!IsClientInGame(i))
-        {
             continue;
-        }
         
         fragcount = GetClientFrags(i);
-        if (fragcount > max)
-        {
+        if (fragcount > max) {
             max = fragcount;
             winning = i;
         }
@@ -904,23 +754,18 @@ GetTopFragger(&score)
     return winning;
 }
 
-//Starts a vote if the given score is high enough.
-CheckWinLimit(winner_score, winning_team)
-{
-    new startRounds = GetConVarInt(cvar_start_rounds);
-    if (cvar_winlimit != INVALID_HANDLE)
-    {
-        new winlimit = GetConVarInt(cvar_winlimit);
-        if (winlimit > 0)
-        {
-            if (winner_score >= (winlimit - startRounds))
-            {
+// Starts a vote if the given score is high enough.
+void CheckWinLimit(int winner_score, int winning_team) {
+    int startRounds = GetConVarInt(cvar_start_rounds);
+    if (cvar_winlimit != INVALID_HANDLE) {
+        int winlimit = GetConVarInt(cvar_winlimit);
+        if (winlimit > 0) {
+            if (winner_score >= (winlimit - startRounds)) {
                 LogUMCMessage("Win limit triggered end of map vote.");
                 DestroyTimers();
                 StartMapVoteRoundEnd();
             }
             
-            //Call the forward
             Call_StartForward(win_tick_forward);
             Call_PushCell(winlimit - startRounds - winner_score);
             Call_PushCell(winning_team);
@@ -929,20 +774,16 @@ CheckWinLimit(winner_score, winning_team)
     }
 }
 
-//Starts a vote if the given round count is high enough
-CheckMaxRounds()
-{
-    if (cvar_maxrounds != INVALID_HANDLE)
-    {
-        new maxrounds; 
+// Starts a vote if the given round count is high enough
+void CheckMaxRounds() {
+    if (cvar_maxrounds != INVALID_HANDLE) {
+        int maxrounds; 
         maxrounds = GetConVarInt(cvar_maxrounds);
         
-        if (maxrounds > 0)
-        {
-            new startRounds = GetConVarInt(cvar_start_rounds);
+        if (maxrounds > 0) {
+            int startRounds = GetConVarInt(cvar_start_rounds);
 
-            if (round_counter >= (maxrounds - startRounds))
-            {
+            if (round_counter >= (maxrounds - startRounds)) {
                 LogUMCMessage("Round limit triggered end of map vote.");
                 DestroyTimers();
                 StartMapVoteRoundEnd();
@@ -955,100 +796,88 @@ CheckMaxRounds()
     }
 }
 
-//Makes the timer which will activate the end-of-map vote at a certain time.
-Handle:MakeTimer()
-{
-    new Handle:result = INVALID_HANDLE;
-    if (SetTimerTriggerTime())
-    {
-        //Make the timer
-        result = CreateTimer(
+// Makes the timer which will activate the end-of-map vote at a certain time.
+Handle MakeTimer() {
+    Handle timer;
+    if (SetTimerTriggerTime()) {
+        // Make the timer
+        timer = CreateTimer(
             1.0,
             Handle_MapVoteTimer,
-            INVALID_HANDLE,
+            _,
             TIMER_FLAG_NO_MAPCHANGE | TIMER_REPEAT
         );
         
-        timer_alive = result != INVALID_HANDLE;
+        timer_alive = timer != null;
         
         if (!timer_alive)
-        {
             LogError("End of map timer could not be created. Please file a bug report with the author.");
-        }
     }
-    else
-    {
+    else {
         timer_alive = false;
-        
-        //Log message
         LogUMCMessage("Unable to create end of map vote time-trigger, trigger time already passed.");
     }
-    return result;
+
+    return timer;
 }
 
 
-//Called when the end-of-vote timer (vote_timer) is finished.
-public Action:Handle_MapVoteTimer(Handle:timer)
-{
-    //Handle vote warnings if vote warnings are enabled.
+// Called when the end-of-vote timer (vote_timer) is finished.
+public Action Handle_MapVoteTimer(Handle timer) {
+    // Handle vote warnings if vote warnings are enabled.
     Call_StartForward(time_tick_forward);
     Call_PushCell(RoundFloat(vote_delaystart));
     Call_Finish();
 
     //Continue ticking if there is still time left on the counter.
-    if (vote_delaystart > 0)
-    {
+    if (vote_delaystart > 0) {
         //Tick another second off the timer counter.
         vote_delaystart--;
         return Plugin_Continue;
     }
     
-    //If there isn't time left on the timer the timer is no longer alive.
+    // If there isn't time left on the timer the timer is no longer alive.
     timer_alive = false;
-    vote_timer = INVALID_HANDLE;
+    vote_timer = null;
     vote_delaystart = -1.0;
     
-    //Start the end-of-map vote.
+    // Start the end-of-map vote.
     SetupMapVote();
     
     return Plugin_Stop;
 }
 
-//Sets the time trigger for the end of map timer.
-bool:SetTimerTriggerTime()
-{
-    //Get current timeleft.
-    new timeleft, Float:triggertime, Float:starttime;
+// Sets the time trigger for the end of map timer.
+bool SetTimerTriggerTime() {
+    // Get current timeleft.
+    int timeleft;
+    float triggertime, starttime;
     GetMapTimeLeft(timeleft);
     
     if (timeleft <= 0)
-    {
         return false;
-    }
     
     starttime = GetConVarFloat(cvar_start_time) * 60;
     
-    //Duration until the vote starts.
+    // Duration until the vote starts.
     triggertime = timeleft - starttime;
-    new bool:result;
+    bool result;
     
-    //Make the timer if the time to start the vote hasn't already passed.
-    if (timeleft >= 0 && starttime > 0 && triggertime > 0)
-    {
-        //Setup counter until the end-of-map vote triggers.
+    // Make the timer if the time to start the vote hasn't already passed.
+    if (timeleft >= 0 && starttime > 0 && triggertime > 0) {
+        // Setup counter until the end-of-map vote triggers.
         vote_delaystart = triggertime - 1;
         result = true;
         
         LogUMCMessage("End of map vote will appear after %.f seconds", triggertime);
     }
-    else //Otherwise...
-    {
-        //Never trigger the vote.
+    else {
+        // Never trigger the vote.
         vote_delaystart = -1.0;
         result = false;
     }
     
-    //Update Vote Warnings if vote warnings are enabled.
+    // Update Vote Warnings if vote warnings are enabled.
     Call_StartForward(time_update_forward);
     Call_PushCell(RoundToFloor(triggertime));
     Call_Finish();
@@ -1057,89 +886,71 @@ bool:SetTimerTriggerTime()
 }
 
 //Update the end-of-map vote timer.
-UpdateTimers()
-{
-    //Reset the timer if we haven't already completed a vote the cvar to run an end-of-round vote is enabled.
-    if (timer_alive)
-    {
-        if (!SetTimerTriggerTime())
-        {
+void UpdateTimers() {
+    // Reset the timer if we haven't already completed a vote the cvar to run an end-of-round vote is enabled.
+    if (timer_alive) {
+        if (!SetTimerTriggerTime()) {
             timer_alive = false;
             KillTimer(vote_timer);
-            vote_timer = INVALID_HANDLE;
+            vote_timer = null;
         }
-        else
-        {
+        else {
             LogUMCMessage("Map vote timer successfully updated.");
         }
     }
-    else //Make a new timer.
-    {
+    else {
         vote_timer = MakeTimer();
     }
 }
 
-//Disables all end-of-map vote timers.
-DestroyTimers()
-{
+// Disables all end-of-map vote timers.
+void DestroyTimers() {
     LogUMCMessage("End of map vote disabled.");
 
     //Delete the time trigger if the timer is alive.
-    if (timer_alive)
-    {
+    if (timer_alive) {
         timer_alive = false;
         KillTimer(vote_timer);
-        vote_timer = INVALID_HANDLE;
+        vote_timer = null;
     }
 }
 
-//Sets up a map vote.
-SetupMapVote()
-{
-    if (GetConVarBool(cvar_vote_roundend))
-    {    
+// Sets up a map vote.
+void SetupMapVote() {
+    if (GetConVarBool(cvar_vote_roundend)) {    
         vote_roundend = true;
     }
-    else
-    {
+    else {
         StartMapVote();
     }
 }
 
-//Starts a map vote due to the round ending.
-StartMapVoteRoundEnd()
-{
-    new Float:delay = GetConVarFloat(cvar_delay);
-    if (delay == 0.0)
-    {
+// Starts a map vote due to the round ending.
+void StartMapVoteRoundEnd() {
+    float delay = GetConVarFloat(cvar_delay);
+    if (delay == 0.0) {
         StartMapVote();
     }
-    else
-    {   
-        CreateTimer(delay, Handle_VoteDelayTimer, INVALID_HANDLE, TIMER_FLAG_NO_MAPCHANGE);
+    else {   
+        CreateTimer(delay, Handle_VoteDelayTimer, _, TIMER_FLAG_NO_MAPCHANGE);
     }
 }
 
-public Action:Handle_VoteDelayTimer(Handle:timer)
-{
+public Action Handle_VoteDelayTimer(Handle timer) {
     StartMapVote();
     return Plugin_Stop;
 }
 
-//Initiates the map vote.
-public StartMapVote()
-{
+// Initiates the map vote.
+public void StartMapVote() {
     if (!vote_enabled)
-    {
         return;
-    }
 
     //Log a message
     LogUMCMessage("Starting an end of map vote.");
     
     //Log an error and retry vote if another vote is currently running for some reason.
-    if (!UMC_IsNewVoteAllowed("core")) 
-    {
+    if (!UMC_IsNewVoteAllowed("core")) {
         LogUMCMessage("There is a vote already in progress, cannot start a new vote.");
         MakeRetryVoteTimer(StartMapVote);
         return;
@@ -1147,47 +958,43 @@ public StartMapVote()
     
     vote_enabled = false;
     vote_completed = true;
-    new String:flags[64];
+    char flags[64];
     GetConVarString(cvar_flags, flags, sizeof(flags));
     
-    new clients[MAXPLAYERS+1];
-    new numClients;
+    int clients[MAXPLAYERS+1];
+    int numClients;
     GetClientsWithFlags(flags, clients, sizeof(clients), numClients);
     
-    //Start the UMC vote.
-    new bool:result = UMC_StartVote(
+    // Start the UMC vote.
+    vote_failed = !UMC_StartVote(
         "core",
-        map_kv,                                                     //Mapcycle
-        umc_mapcycle,                                               //Full mapcycle
-        UMC_VoteType:GetConVarInt(cvar_vote_type),                  //Vote Type (map, group, tiered)
-        GetConVarInt(cvar_vote_time),                               //Vote duration
-        GetConVarBool(cvar_scramble),                               //Scramble
-        vote_start_sound,                                           //Start Sound
-        vote_end_sound,                                             //End Sound
-        GetConVarInt(cvar_extensions) > extend_counter,             //Extend option
-        GetConVarFloat(cvar_extend_time),                           //How long to extend the timelimit by,
-        GetConVarInt(cvar_extend_rounds),                           //How much to extend the roundlimit by,
-        GetConVarInt(cvar_extend_frags),                            //How much to extend the fraglimit by,
-        false,                                                      //Don't Change option
-        GetConVarFloat(cvar_vote_threshold),                        //Threshold
-        UMC_ChangeMapTime:GetConVarInt(cvar_changetime),        //Success Action (when to change the map)
-        UMC_VoteFailAction:GetConVarInt(cvar_fail_action),          //Fail Action (runoff / nothing)
-        GetConVarInt(cvar_runoff),                                  //Max Runoffs
-        GetConVarInt(cvar_runoff_max),                              //Max maps in the runoff
-        UMC_RunoffFailAction:GetConVarInt(cvar_runoff_fail_action), //Runoff Fail Action
-        runoff_sound,                                               //Runoff Sound
-        GetConVarBool(cvar_strict_noms),                            //Nomination Strictness
-        GetConVarBool(cvar_vote_allowduplicates),                   //Ignore Duplicates
+        map_kv,                                                               // Mapcycle
+        umc_mapcycle,                                                         // Full mapcycle
+        view_as<UMC_VoteType>(GetConVarInt(cvar_vote_type)),                  // Vote Type (map, group, tiered)
+        GetConVarInt(cvar_vote_time),                                         // Vote duration
+        GetConVarBool(cvar_scramble),                                         // Scramble
+        vote_start_sound,                                                     // Start Sound
+        vote_end_sound,                                                       // End Sound
+        GetConVarInt(cvar_extensions) > extend_counter,                       // Extend option
+        GetConVarFloat(cvar_extend_time),                                     // How long to extend the timelimit by,
+        GetConVarInt(cvar_extend_rounds),                                     // How much to extend the roundlimit by,
+        GetConVarInt(cvar_extend_frags),                                      // How much to extend the fraglimit by,
+        false,                                                                // Don't Change option
+        GetConVarFloat(cvar_vote_threshold),                                  // Threshold
+        view_as<UMC_ChangeMapTime>(GetConVarInt(cvar_changetime)),            // Success Action (when to change the map)
+        view_as<UMC_VoteFailAction>(GetConVarInt(cvar_fail_action)),          // Fail Action (runoff / nothing)
+        GetConVarInt(cvar_runoff),                                            // Max Runoffs
+        GetConVarInt(cvar_runoff_max),                                        // Max maps in the runoff
+        view_as<UMC_RunoffFailAction>(GetConVarInt(cvar_runoff_fail_action)), // Runoff Fail Action
+        runoff_sound,                                                         // Runoff Sound
+        GetConVarBool(cvar_strict_noms),                                      // Nomination Strictness
+        GetConVarBool(cvar_vote_allowduplicates),                             // Ignore Duplicates
         clients,
         numClients
     );
 
-    vote_failed = !result;
-    
-    if (!result)
-    {
+    if (vote_failed)
         LogUMCMessage("Could not start UMC vote.");
-    }
 }
 
 //************************************************************************************************//
@@ -1195,40 +1002,39 @@ public StartMapVote()
 //************************************************************************************************//
 
 //Called when UMC has set a next map.
-public UMC_OnNextmapSet(Handle:kv, const String:map[], const String:group[], const String:display[])
-{
+public int UMC_OnNextmapSet(Handle kv, const char[] map, const char[] group, const char[] display) {
     DestroyTimers();
     vote_enabled = false;
     vote_roundend = false;
     vote_failed = false;
+
+    return 0;
 }
 
 //Called when UMC requests that the mapcycle should be reloaded.
-public UMC_RequestReloadMapcycle()
-{
-    if (!ReloadMapcycle())
-    {
+public int UMC_RequestReloadMapcycle() {
+    if (!ReloadMapcycle()) {
         DestroyTimers();
         vote_enabled = false;
     }
-    else
-    {
+    else {
         RemovePreviousMapsFromCycle();
     }
+
+    return 0;
 }
 
 //Called when UMC requests that the mapcycle is printed to the console.
-public UMC_DisplayMapCycle(client, bool:filtered)
-{
+public int UMC_DisplayMapCycle(int client, bool filtered) {
     PrintToConsole(client, "Module: End of Map Vote");
-    if (filtered)
-    {
-        new Handle:filteredMapcycle = UMC_FilterMapcycle(map_kv, umc_mapcycle, false, true);
+    if (filtered) {
+        KeyValues filteredMapcycle = view_as<KeyValues>(UMC_FilterMapcycle(map_kv, umc_mapcycle, false, true));
         PrintKvToConsole(filteredMapcycle, client);
-        CloseHandle(filteredMapcycle);
+        delete filteredMapcycle;
     }
-    else
-    {
+    else {
         PrintKvToConsole(umc_mapcycle, client);
     }
+
+    return 0;
 }
