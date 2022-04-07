@@ -496,8 +496,10 @@ public void Event_RestartRound(Event evnt, const char[] name, bool dontBroadcast
 public void OnMapEnd() {
     // Vote timer is not running
     timer_alive = false;
-    KillTimer(vote_timer);
-    vote_timer = null;
+    if (vote_timer != null) {
+        KillTimer(vote_timer);
+        vote_timer = null;
+    }
 }
 
 // Parses the mapcycle file and returns a KV handle representing the mapcycle.
@@ -757,42 +759,49 @@ int GetTopFragger(int &score) {
 // Starts a vote if the given score is high enough.
 void CheckWinLimit(int winner_score, int winning_team) {
     int startRounds = GetConVarInt(cvar_start_rounds);
-    if (cvar_winlimit != INVALID_HANDLE) {
-        int winlimit = GetConVarInt(cvar_winlimit);
-        if (winlimit > 0) {
-            if (winner_score >= (winlimit - startRounds)) {
-                LogUMCMessage("Win limit triggered end of map vote.");
-                DestroyTimers();
-                StartMapVoteRoundEnd();
-            }
-            
-            Call_StartForward(win_tick_forward);
-            Call_PushCell(winlimit - startRounds - winner_score);
-            Call_PushCell(winning_team);
-            Call_Finish();
-        }
+    if (cvar_winlimit == INVALID_HANDLE) 
+        return;
+
+    int winlimit = GetConVarInt(cvar_winlimit);
+    if (winlimit == 0)
+        return;
+
+    int timeleft;
+    GetMapTimeLeft(timeleft);
+
+    // TF2 forces map change if the time remaining is less than 5 minutes
+    if (winner_score >= (winlimit - startRounds) || (timeleft <= 310 && timeleft >= 0)) {
+        LogUMCMessage("Win limit triggered end of map vote.");
+        DestroyTimers();
+        StartMapVoteRoundEnd();
     }
+    
+    Call_StartForward(win_tick_forward);
+    Call_PushCell(winlimit - startRounds - winner_score);
+    Call_PushCell(winning_team);
+    Call_Finish();
 }
 
 // Starts a vote if the given round count is high enough
 void CheckMaxRounds() {
-    if (cvar_maxrounds != INVALID_HANDLE) {
-        int maxrounds; 
-        maxrounds = GetConVarInt(cvar_maxrounds);
-        
-        if (maxrounds > 0) {
-            int startRounds = GetConVarInt(cvar_start_rounds);
+    if (cvar_maxrounds == INVALID_HANDLE)
+        return;
 
-            if (round_counter >= (maxrounds - startRounds)) {
-                LogUMCMessage("Round limit triggered end of map vote.");
-                DestroyTimers();
-                StartMapVoteRoundEnd();
-            }
-            
-            Call_StartForward(round_tick_forward);
-            Call_PushCell(maxrounds - startRounds - round_counter);
-            Call_Finish();
+    int maxrounds; 
+    maxrounds = GetConVarInt(cvar_maxrounds);
+    
+    if (maxrounds > 0) {
+        int startRounds = GetConVarInt(cvar_start_rounds);
+
+        if (round_counter >= (maxrounds - startRounds)) {
+            LogUMCMessage("Round limit triggered end of map vote.");
+            DestroyTimers();
+            StartMapVoteRoundEnd();
         }
+        
+        Call_StartForward(round_tick_forward);
+        Call_PushCell(maxrounds - startRounds - round_counter);
+        Call_Finish();
     }
 }
 
